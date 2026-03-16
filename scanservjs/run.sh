@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r4"
+RUNTIME_REVISION="2026-03-16-r5"
 
 log() {
   bashio::log.info "$*"
@@ -157,6 +157,7 @@ ensure_brother_sane_links() {
   local src_dirs=("/usr/lib64/sane" "/opt/brother/scanner/brscan4")
   local dst_dirs=("/usr/lib/x86_64-linux-gnu/sane" "/usr/lib64/sane")
   local src_dir dst_dir
+  local target
   local linked="false"
 
   for src_dir in "${src_dirs[@]}"; do
@@ -165,7 +166,11 @@ ensure_brother_sane_links() {
       [[ -d "$dst_dir" ]] || continue
       shopt -s nullglob
       for lib in "$src_dir"/libsane-brother*.so*; do
-        ln -sf "$lib" "$dst_dir/$(basename "$lib")"
+        target="$dst_dir/$(basename "$lib")"
+        if [[ "$lib" == "$target" ]] || [[ -e "$target" && "$lib" -ef "$target" ]]; then
+          continue
+        fi
+        ln -sf "$lib" "$target"
         linked="true"
       done
       shopt -u nullglob
