@@ -2,14 +2,34 @@
 
 BROTHER_BUTTON_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 BROTHER_BUTTON_ENV_FILE="${BROTHER_BUTTON_SCRIPT_DIR}/scanservjs.env"
+BROTHER_BUTTON_LOG_FILE="/tmp/scanservjs-brother-button.log"
+
+button_log() {
+  local level="$1"
+  shift
+  local line
+
+  line="[Brother Button][${level}] $(date '+%Y-%m-%d %H:%M:%S') $*"
+  printf '%s\n' "${line}" >>"${BROTHER_BUTTON_LOG_FILE}" 2>/dev/null || true
+
+  if [[ -w /proc/1/fd/1 ]]; then
+    printf '%s\n' "${line}" >/proc/1/fd/1
+  else
+    printf '%s\n' "${line}" >&2
+  fi
+}
 
 load_button_env() {
-  [[ -f "${BROTHER_BUTTON_ENV_FILE}" ]] || return 0
+  if [[ ! -f "${BROTHER_BUTTON_ENV_FILE}" ]]; then
+    button_log "warn" "env file missing: ${BROTHER_BUTTON_ENV_FILE}"
+    return 0
+  fi
 
   set -a
   # shellcheck disable=SC1090
   source "${BROTHER_BUTTON_ENV_FILE}"
   set +a
+  button_log "info" "loaded env file: ${BROTHER_BUTTON_ENV_FILE}"
 }
 
 button_timestamp() {
@@ -59,11 +79,13 @@ load_button_profile_config() {
   local config_path=""
 
   if ! config_path="$(button_profile_config_path "${profile}")"; then
+    button_log "warn" "no profile config found for profile=${profile}"
     return 0
   fi
 
   # shellcheck disable=SC1090
   source "${config_path}"
+  button_log "info" "loaded profile config: ${config_path}"
 }
 
 normalize_scan_format() {
@@ -158,13 +180,17 @@ copy_scan_output() {
   local output_file="$1"
 
   if [[ -z "${COPY_SCANS_TO:-}" || "${COPY_SCANS_TO}" == "null" ]]; then
+    button_log "info" "copy skipped for ${output_file}: COPY_SCANS_TO not set"
     return 0
   fi
 
   mkdir -p "${COPY_SCANS_TO}" 2>/dev/null || true
   if ! cp -f "${output_file}" "${COPY_SCANS_TO}/"; then
-    echo "Brother button: copy to ${COPY_SCANS_TO} failed for ${output_file}" >&2
+    button_log "error" "copy failed target=${COPY_SCANS_TO} file=${output_file}"
+    return 1
   fi
+
+  button_log "info" "copied output to ${COPY_SCANS_TO}/$(basename "${output_file}")"
 }
 
 scan_via_profile() {
@@ -175,16 +201,19 @@ scan_via_profile() {
   local skey_bin=""
   local -a scan_args=()
 
+  button_log "info" "scan invoked profile=${profile} requested_device=${requested_device:-<leer>} friendly_name=${friendly_name:-<leer>}"
   load_button_env
 
   output_dir="$(button_output_dir)"
   mkdir -p "${output_dir}"
+  button_log "info" "using output dir: ${output_dir}"
 
   device="$(resolve_device "${requested_device}")"
   if [[ -z "${device}" ]]; then
-    echo "Brother button ${profile}: no scanner device resolved" >&2
+    button_log "error" "no scanner device resolved for profile=${profile}"
     exit 1
   fi
+  button_log "info" "resolved device: ${device}"
 
   if [[ -x "/opt/brother/scanner/brscan-skey/skey-scanimage" ]]; then
     skey_bin="/opt/brother/scanner/brscan-skey/skey-scanimage"
@@ -193,10 +222,13 @@ scan_via_profile() {
     output_file="${output_dir}/button_${profile}_$(button_timestamp).${ext}"
     scan_args=(--device-name "${device}" --outputfile "${output_file}")
     append_skey_args "${profile}" scan_args
-    echo "Brother button ${profile}: skey scan start device=${device} name=${friendly_name:-<unknown>} output=${output_file}"
-    if ! "${skey_bin}" "${scan_args[@]}"; then
+    button_log "info" "skey scan start profile=${profile} output=${output_file} args=${scan_args[*]}"
+    if "${skey_bin}" "${scan_args[@]}"; then
+      button_log "info" "skey-scanimage finished successfully profile=${profile}"
+    else
+      local exit_code=$?
       rm -f "${output_file}"
-      echo "Brother button ${profile}: skey-scanimage failed" >&2
+      button_log "error" "skey-scanimage failed profile=${profile} exit=${exit_code}"
       exit 1
     fi
   else
@@ -213,22 +245,26 @@ scan_via_profile() {
         ;;
     esac
 
-    echo "Brother button ${profile}: generic scan start device=${device} name=${friendly_name:-<unknown>} output=${output_file}"
-    if ! scanimage "${scan_args[@]}" >"${output_file}"; then
+    button_log "info" "generic scan start profile=${profile} output=${output_file} args=${scan_args[*]}"
+    if scanimage "${scan_args[@]}" >"${output_file}"; then
+      button_log "info" "generic scan finished successfully profile=${profile}"
+    else
+      local exit_code=$?
       rm -f "${output_file}"
-      echo "Brother button ${profile}: scanimage failed" >&2
+      button_log "error" "scanimage failed profile=${profile} exit=${exit_code}"
       exit 1
     fi
   fi
 
   if [[ ! -s "${output_file}" ]]; then
     rm -f "${output_file}"
-    echo "Brother button ${profile}: empty output file" >&2
+    button_log "error" "empty output file profile=${profile} output=${output_file}"
     exit 1
   fi
 
+  button_log "info" "scan output created profile=${profile} output=${output_file} size=$(wc -c <"${output_file}" 2>/dev/null || printf '0')"
   copy_scan_output "${output_file}"
-  echo "Brother button ${profile}: scan saved to ${output_file}"
+  button_log "info" "scan saved profile=${profile} output=${output_file}"
 }
 
 trigger_webhook() {
@@ -238,16 +274,17 @@ trigger_webhook() {
   local friendly_name="${4:-}"
   local webhook_id device payload timestamp
 
+  button_log "info" "trigger invoked button=${button} requested_device=${requested_device:-<leer>} friendly_name=${friendly_name:-<leer>}"
   load_button_env
 
   webhook_id="${!webhook_var:-}"
   if [[ -z "${webhook_id}" || "${webhook_id}" == "null" ]]; then
-    echo "Brother button ${button}: no webhook configured"
+    button_log "warn" "no webhook configured for button=${button}"
     return 0
   fi
 
   if [[ -z "${SUPERVISOR_TOKEN:-}" ]]; then
-    echo "Brother button ${button}: SUPERVISOR_TOKEN missing" >&2
+    button_log "error" "SUPERVISOR_TOKEN missing for button=${button}"
     exit 1
   fi
 
@@ -262,12 +299,12 @@ trigger_webhook() {
     --arg timestamp "${timestamp}" \
     '{source:$source,button:$button,device:$device,scanner_name:$scanner_name,friendly_name:$friendly_name,timestamp:$timestamp}')"
 
-  echo "Brother button ${button}: trigger webhook ${webhook_id}"
+  button_log "info" "trigger webhook start button=${button} webhook_id=${webhook_id} device=${device}"
   curl -fsS \
     -X POST \
     -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
     -H "Content-Type: application/json" \
     -d "${payload}" \
     "http://supervisor/core/api/webhook/${webhook_id}" >/dev/null
-  echo "Brother button ${button}: webhook delivered"
+  button_log "info" "webhook delivered button=${button} webhook_id=${webhook_id}"
 }
