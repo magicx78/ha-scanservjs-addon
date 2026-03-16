@@ -20,6 +20,9 @@ configuration:
   copy_scans_to:
     name: Wunschverzeichnis fuer Scans
     description: Zielverzeichnis fuer fertige Scans bei custom oder als Fallback bei auto.
+  generic_scanner_ip:
+    name: Generische Scanner-IP (AirScan Fallback)
+    description: Optionale Scanner-IP fuer automatische eSCL/WSD-Eintraege, wenn airscan_devices leer ist. Geeignet fuer HP/Epson/Canon/Xerox MFP ohne Brother-Modus.
   brother_enable:
     name: Brother-Unterstuetzung aktivieren
     description: Aktiviert die optionale Brother-brscan4-Logik.

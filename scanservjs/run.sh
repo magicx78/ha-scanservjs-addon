@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r27"
+RUNTIME_REVISION="2026-03-16-r28"
 
 log() {
   bashio::log.info "$*"
@@ -672,6 +672,8 @@ main() {
   copy_scans_to_mode="$(opt '.copy_scans_to_mode // "custom"')"
   copy_scans_to_custom="$(opt '.copy_scans_to // ""')"
   COPY_SCANS_TO="$(resolve_copy_scans_to "$copy_scans_to_mode" "$copy_scans_to_custom")"
+  local generic_scanner_ip
+  generic_scanner_ip="$(opt '.generic_scanner_ip // ""')"
   BROTHER_BUTTON_OUTPUT_DIR_OVERRIDE="$(opt '.brother_button_output_dir // ""')"
   BROTHER_BUTTON_DEFAULT_RESOLUTION="$(opt '.brother_button_default_resolution // 300')"
   BROTHER_BUTTON_SCAN_FORMAT="$(opt '.brother_button_scan_format // "jpeg"')"
@@ -686,7 +688,10 @@ main() {
   BROTHER_TRIGGER_IMAGE_WEBHOOK_ID="$(opt '.brother_trigger_image_webhook_id // ""')"
   BROTHER_TRIGGER_OCR_WEBHOOK_ID="$(opt '.brother_trigger_ocr_webhook_id // ""')"
   local fallback_scanner_ip
-  fallback_scanner_ip="$(opt '.brother_scanner_ip // ""')"
+  fallback_scanner_ip="${generic_scanner_ip}"
+  if [[ -z "$fallback_scanner_ip" || "$fallback_scanner_ip" == "null" ]]; then
+    fallback_scanner_ip="$(opt '.brother_scanner_ip // ""')"
+  fi
 
   configure_scanimage_discovery "$SCANIMAGE_LIST_IGNORE"
 
@@ -718,6 +723,9 @@ main() {
       grep -Fqx "$devline" /etc/sane.d/airscan.conf 2>/dev/null || sed -i "/^\[devices\]/a $devline" /etc/sane.d/airscan.conf
     done < <(split_delim_lines "$AIRSCAN_DEVICES")
   else
+    if [[ -n "$fallback_scanner_ip" && "$fallback_scanner_ip" != "null" ]]; then
+      log "AirScan Fallback aktiv fuer Scanner-IP: ${fallback_scanner_ip}"
+    fi
     ensure_generic_airscan_fallbacks "$fallback_scanner_ip"
   fi
 

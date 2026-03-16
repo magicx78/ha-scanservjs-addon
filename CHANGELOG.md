@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.12] - 2026-03-16
+
+### Added
+- Generic scanner fallback option `generic_scanner_ip` for non-Brother network MFPs.
+- Extended documentation for HP/Epson/Canon/Xerox-style generic SANE/AirScan setups.
+
+### Changed
+- Runtime revision bumped to `2026-03-16-r28`.
+- Startup fallback now prefers `generic_scanner_ip` and still falls back to `brother_scanner_ip` for compatibility.
+
 ## [1.0.11] - 2026-03-16
 
 ### Added

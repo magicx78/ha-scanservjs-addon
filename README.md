@@ -64,6 +64,7 @@ devices: ""
 ocr_lang: "deu+eng"
 copy_scans_to_mode: custom
 copy_scans_to: "/share/paperless/consume"
+generic_scanner_ip: "192.168.1.50"
 brother_enable: false
 ```
 
@@ -77,6 +78,7 @@ devices: ""
 ocr_lang: "deu+eng"
 copy_scans_to_mode: custom
 copy_scans_to: "/share/paperless/consume"
+generic_scanner_ip: ""
 brother_enable: true
 brother_accept_eula: true
 brother_driver_source: auto
@@ -108,6 +110,7 @@ brother_copy_ocr_to_target: false
 - `ocr_lang`: Tesseract OCR language selection such as `deu+eng`
 - `copy_scans_to_mode`: `auto`, `paperless`, or `custom`
 - `copy_scans_to`: custom target directory for completed scans, also used as fallback in `auto` mode
+- `generic_scanner_ip`: optional generic AirScan fallback IP, used to generate eSCL/WSD entries when `airscan_devices` is empty
 - `brother_enable`: enables Brother setup logic
 - `brother_accept_eula`: required before proprietary Brother download or install
 - `brother_driver_source`: `auto`, `url`, or `local`
@@ -193,6 +196,24 @@ Network devices:
 - can be configured through `saned_net_hosts`, `airscan_devices`, or Brother registration
 - work best with static DHCP reservations or stable hostnames
 
+## Other Vendors (HP, Epson, Canon, Xerox)
+
+For non-Brother devices, keep the add-on in generic SANE mode:
+
+- set `brother_enable: false`
+- prefer `airscan_devices` if you already know the exact eSCL/WSD endpoints
+- if autodiscovery is flaky, set `generic_scanner_ip` to create fallback entries automatically
+- validate in `scanservjs` with `/api/v1/context` and then run a Web/API scan
+
+Example (generic network MFP):
+
+```yaml
+brother_enable: false
+saned_net_hosts: ""
+airscan_devices: ""
+generic_scanner_ip: "192.168.1.60"
+```
+
 ## Brother Notes
 
 Brother support is optional and disabled by default.
@@ -221,6 +242,7 @@ Scanner not detected:
 - inspect add-on logs
 - run `scanimage -L` inside the container
 - confirm `saned_net_hosts` and `airscan_devices`
+- if using a non-Brother network scanner, set `generic_scanner_ip` as fallback
 
 Ingress or Web UI unavailable:
 

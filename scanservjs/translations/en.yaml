@@ -20,6 +20,9 @@ configuration:
   copy_scans_to:
     name: Custom scan target path
     description: Destination directory for completed scans in custom mode or as fallback in auto mode.
+  generic_scanner_ip:
+    name: Generic scanner IP (AirScan fallback)
+    description: Optional scanner IP for automatic eSCL/WSD entries when airscan_devices is empty. Useful for HP/Epson/Canon/Xerox MFPs without Brother mode.
   brother_enable:
     name: Enable Brother support
     description: Activates optional Brother brscan4 setup logic.
