@@ -10,6 +10,13 @@
 - Runtime revision bumped to `2026-03-16-r28`.
 - Startup fallback now prefers `generic_scanner_ip` and still falls back to `brother_scanner_ip` for compatibility.
 
+### Validation
+- HAOS validation passed for `v1.0.12` / `Runtime-Revision: 2026-03-16-r28`.
+- Add-on starts without restart loop and reaches `Starte scanservjs`.
+- `/api/v1/context` resolves Brother device `brother4:net1;dev0`.
+- Brother frontpanel `File/Email/Image/OCR` runs end-to-end.
+- Generic SANE path remains unchanged; only fallback selection was extended (`generic_scanner_ip` first, then legacy Brother IP fallback).
+
 ## [1.0.11] - 2026-03-16
 
 ### Added
