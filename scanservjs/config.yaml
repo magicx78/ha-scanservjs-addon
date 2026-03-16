@@ -1,5 +1,5 @@
 ﻿name: "scanservjs Scan Server"
-version: "1.1.2"
+version: "1.1.3"
 slug: "scanservjs"
 description: "scanservjs Web-UI fuer Scanner (SANE) - optional mit Brother brscan4 Auto-Install und MFC-L2700DW Netzwerk-Registrierung."
 url: "https://github.com/magicx78/ha-scanservjs-addon"
@@ -48,6 +48,8 @@ options:
   sorter_confidence_threshold: 75
   sorter_provider: "anthropic"
   sorter_model: "claude-sonnet-4-20250514"
+  openai_api_key: ""
+  anthropic_api_key: ""
   paperless_url: ""
   paperless_token: ""
   sorter_inbox_dir: "/data/output"
@@ -95,6 +97,8 @@ schema:
   sorter_confidence_threshold: int?
   sorter_provider: list(anthropic|openai)?
   sorter_model: str?
+  openai_api_key: password?
+  anthropic_api_key: password?
   paperless_url: str?
   paperless_token: password?
   sorter_inbox_dir: str?
@@ -127,5 +131,6 @@ schema:
   brother_button_scan_args_email: str?
   brother_trigger_image_webhook_id: str?
   brother_trigger_ocr_webhook_id: str?
+
 
 

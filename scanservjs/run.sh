@@ -696,6 +696,7 @@ register_brother() {
 main() {
   export SANED_NET_HOSTS AIRSCAN_DEVICES SCANIMAGE_LIST_IGNORE DEVICES OCR_LANG COPY_SCANS_TO
   export SORTER_ENABLE SORTER_CONFIDENCE_THRESHOLD SORTER_PROVIDER SORTER_MODEL PAPERLESS_URL PAPERLESS_TOKEN SORTER_PYTHON
+  export OPENAI_API_KEY ANTHROPIC_API_KEY
   export SORTER_INBOX_DIR SORTER_REVIEW_DIR SORTER_PROCESSED_DIR SORTER_STATE_DIR
   export BROTHER_BUTTON_OUTPUT_DIR_OVERRIDE
   export BROTHER_BUTTON_DEFAULT_RESOLUTION BROTHER_BUTTON_SCAN_FORMAT BROTHER_BUTTON_SCAN_ARGS_FILE BROTHER_BUTTON_SCAN_ARGS_EMAIL
@@ -725,6 +726,8 @@ main() {
   SORTER_CONFIDENCE_THRESHOLD="$(opt '.sorter_confidence_threshold // 75')"
   SORTER_PROVIDER="$(opt '.sorter_provider // "anthropic"')"
   SORTER_MODEL="$(opt '.sorter_model // "claude-sonnet-4-20250514"')"
+  OPENAI_API_KEY="$(opt '.openai_api_key // ""')"
+  ANTHROPIC_API_KEY="$(opt '.anthropic_api_key // ""')"
   PAPERLESS_URL="$(opt '.paperless_url // ""')"
   PAPERLESS_TOKEN="$(opt '.paperless_token // ""')"
   SORTER_INBOX_DIR="$(opt '.sorter_inbox_dir // "/data/output"')"
