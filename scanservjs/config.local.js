@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 const options = { paths: ['/usr/lib/scanservjs'] };
-const Process = require(require.resolve('./server/classes/process', options));
-const dayjs = require(require.resolve('dayjs', options));
+const fs = require('fs/promises');
+const path = require('path');
 
 /**
  * This file is ignored. If you want to apply overrides, make a copy in this
@@ -122,10 +122,19 @@ module.exports = {
    * @returns {Promise.<any>}
    */
   async afterScan(fileInfo) {
-    // Copy the file to the specified directory
-    copy_destination = process.env.COPY_SCANS_TO
-    // TODO: Fix location
-    return await Process.spawn(`cp '${fileInfo.fullname}' '/share/paperless/consume/'`);
+    const destinationDir = process.env.COPY_SCANS_TO;
+    if (!destinationDir) {
+      return;
+    }
+
+    try {
+      await fs.mkdir(destinationDir, { recursive: true });
+      const destinationPath = path.join(destinationDir, path.basename(fileInfo.fullname));
+      await fs.copyFile(fileInfo.fullname, destinationPath);
+      return `Copied to ${destinationPath}`;
+    } catch (error) {
+      return error;
+    }
   },
 
   /**

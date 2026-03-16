@@ -1,0 +1,77 @@
+name: "scanservjs Scan Server"
+version: "1.1.0"
+slug: "scanservjs"
+description: "scanservjs Web-UI fuer Scanner (SANE) - optional mit Brother brscan4 Auto-Install und MFC-L2700DW Netzwerk-Registrierung."
+url: "https://github.com/hoenas/ha-scanservjs-addon"
+
+arch:
+  - amd64
+
+init: false
+startup: services
+boot: auto
+
+ingress: true
+ingress_port: 8080
+panel_icon: "mdi:scanner"
+
+ports:
+  8080/tcp: 8080
+ports_description:
+  8080/tcp: "scanservjs Web interface"
+
+icon: icon.png
+logo: icon.png
+apparmor: true
+usb: true
+homeassistant_api: true
+
+map:
+  - type: ssl
+  - type: share
+    read_only: false
+  - type: media
+    read_only: false
+
+options:
+  saned_net_hosts: ""
+  airscan_devices: ""
+  scanimage_list_ignore: false
+  devices: ""
+  ocr_lang: "deu+eng"
+  copy_scans_to: "/share/paperless/consume"
+
+  brother_enable: false
+  brother_accept_eula: false
+  brother_driver_source: "auto"
+  brother_driver_url: ""
+  brother_driver_sha256: ""
+  brother_driver_local_path: "/share/brscan4.amd64.deb"
+
+  brother_register_scanner: true
+  brother_scanner_name: "Brother"
+  brother_scanner_model: "MFC-L2700DW"
+  brother_scanner_ip: ""
+  brother_scanner_nodename: ""
+  brother_overwrite_existing: false
+
+schema:
+  saned_net_hosts: str?
+  airscan_devices: str?
+  scanimage_list_ignore: bool?
+  devices: str?
+  ocr_lang: str?
+  copy_scans_to: str?
+
+  brother_enable: bool?
+  brother_accept_eula: bool?
+  brother_driver_source: list(auto|url|local)?
+  brother_driver_url: str?
+  brother_driver_sha256: str?
+  brother_driver_local_path: str?
+  brother_register_scanner: bool?
+  brother_scanner_name: str?
+  brother_scanner_model: str?
+  brother_scanner_ip: str?
+  brother_scanner_nodename: str?
+  brother_overwrite_existing: bool?

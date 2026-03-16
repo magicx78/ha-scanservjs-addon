@@ -1,11 +1,32 @@
 # scanservjs Home Assistant Addon
 
-# Description
+## Description
 
-scanservjs is a web UI frontend for your scanner. It allows you to share one or more scanners (using SANE) on a network without the need for drivers or complicated installation. This was created primarily to support Home Assistant installations on devices with x86 architecture, such as AMD/Intel-based thin clients. The installed driver packages focus on HP and Brother printer support.
+This addon provides the `scanservjs` web UI for SANE scanners on Home Assistant OS systems. The updated addon targets `amd64` and keeps standard scanservjs/SANE behavior unchanged by default.
 
-# Considerations
+## Brother support
 
-* USB printers should be connected to the host device prior to starting this addon. If disconnected/connected during runtime, simply restart the addon. Similarly, ensure the printer is not idle/power saving before loading the scanservjs GUI.
+Brother support is optional and disabled by default.
 
-* The repository includes a version of the "brscan4" Brother scanner driver that was downloaded directly from the Brother support website. This file is referenced within `Dockerfile` for driver installation and amendment of the SANE configuration file to include the driver. Please note that an additional line should be added to `Dockerfile` for network scanner support - see the bottom of the "Accessing Hardware" section of [this scanservjs documentation](https://github.com/sbs20/scanservjs/blob/master/docs/docker.md#accessing-hardware).
+- `brother_enable: true` enables the Brother startup workflow.
+- `brother_accept_eula: true` is required before any proprietary `brscan4` driver download or installation is attempted.
+- `brother_driver_source` supports `auto`, `url`, and `local`.
+- `brother_register_scanner` can automatically register a network scanner with `brsaneconfig4`.
+- Registration is idempotent and can be forcibly refreshed with `brother_overwrite_existing: true`.
+
+Typical example for a Brother MFC-L2700DW:
+
+```yaml
+brother_enable: true
+brother_accept_eula: true
+brother_driver_source: auto
+brother_scanner_name: MFC_L2700
+brother_scanner_model: MFC-L2700DW
+brother_scanner_ip: 192.168.1.50
+```
+
+## Notes
+
+- Network scanners are the preferred setup for containerized scanservjs deployments.
+- USB scanners should be connected before the addon starts; if the device is replugged, restart the addon.
+- Scanned files are copied to `copy_scans_to` after each scan. The default destination is `/share/paperless/consume`.
