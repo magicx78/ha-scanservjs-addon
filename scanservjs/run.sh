@@ -119,6 +119,25 @@ brother_cfg_file() {
   echo "/etc/opt/brother/scanner/brscan4/brsanenetdevice4.cfg"
 }
 
+ensure_brother_sane_links() {
+  local src_dir="/usr/lib64/sane"
+  local dst_dir="/usr/lib/x86_64-linux-gnu/sane"
+  local linked="false"
+
+  [[ -d "$src_dir" && -d "$dst_dir" ]] || return 0
+
+  shopt -s nullglob
+  for lib in "$src_dir"/libsane-brother*.so*; do
+    ln -sf "$lib" "$dst_dir/$(basename "$lib")"
+    linked="true"
+  done
+  shopt -u nullglob
+
+  if [[ "$linked" == "true" ]]; then
+    log "Brother libsane Links nach ${dst_dir} aktualisiert"
+  fi
+}
+
 brother_is_registered() {
   local name="$1"
   local model="$2"
@@ -241,6 +260,7 @@ install_brscan4() {
   rm -f "$deb"
   rm -f "$skey_deb"
   ensure_line "brother4" "/etc/sane.d/dll.conf"
+  ensure_brother_sane_links
 }
 
 configure_brscan_skey() {
@@ -412,6 +432,7 @@ main() {
     bow="$(opt '.brother_overwrite_existing // false')"
 
     install_brscan4 "$baccept" "$bsrc" "$burl" "$bsha" "$blocal"
+    ensure_brother_sane_links
     register_brother "$doreg" "$bname" "$bmodel" "$bip" "$bnode" "$bow"
     if [[ -n "$bip" && "$bip" != "null" ]]; then
       configure_brscan_skey "$bip"
