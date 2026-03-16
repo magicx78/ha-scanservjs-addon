@@ -248,6 +248,8 @@ main() {
   OCR_LANG="$(opt '.ocr_lang // "eng"')"
   COPY_SCANS_TO="$(opt '.copy_scans_to // ""')"
 
+  ensure_line "airscan" "/etc/sane.d/dll.conf"
+
   if [[ -n "$COPY_SCANS_TO" && "$COPY_SCANS_TO" != "null" ]]; then
     log "COPY_SCANS_TO=${COPY_SCANS_TO}"
     mkdir -p "$COPY_SCANS_TO" || true
