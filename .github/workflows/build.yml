@@ -53,7 +53,8 @@ jobs:
         run: docker build --build-arg BUILD_FROM=sbs20/scanservjs:v3.0.3 -t ha-scanservjs-addon:test ./scanservjs
 
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.28.0
+        id: trivy_scan
+        uses: aquasecurity/trivy-action@0.35.0
         continue-on-error: true
         with:
           image-ref: ha-scanservjs-addon:test
@@ -77,6 +78,17 @@ jobs:
             echo "exists=false" >> "${GITHUB_OUTPUT}"
             echo "Expected SARIF file was not created" >&2
           fi
+
+      - name: Debug Trivy SARIF gating
+        if: always()
+        shell: bash
+        run: |
+          echo "trivy_outcome=${{ steps.trivy_scan.outcome }}"
+          echo "trivy_conclusion=${{ steps.trivy_scan.conclusion }}"
+          echo "sarif_exists=${{ steps.trivy_sarif.outputs.exists }}"
+          echo "event_name=${{ github.event_name }}"
+          echo "repository=${{ github.repository }}"
+          echo "repository_is_fork=${{ github.event.repository.fork }}"
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v4
