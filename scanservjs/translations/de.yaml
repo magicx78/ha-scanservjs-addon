@@ -58,7 +58,7 @@ configuration:
     description: Entfernt einen vorhandenen Brother-Eintrag vor der Neuregistrierung.
   brother_button_scan_format:
     name: Brother-Tasten Scanformat
-    description: Ausgabeformat fuer Brother Scan to File und Scan to Email, zum Beispiel jpeg oder png.
+    description: Ausgabeformat fuer Brother Scan to File und Scan to Email, z.B. jpeg oder png. Fuer Paperless sind 300dpi und eher kompakte Formate sinnvoll.
   brother_button_scan_args_file:
     name: Brother-Datei-Taste Scanargumente
     description: Optionale zusaetzliche scanimage-Argumente fuer Scan to File, durch Leerzeichen getrennt.

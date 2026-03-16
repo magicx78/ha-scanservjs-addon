@@ -113,6 +113,16 @@ brother_overwrite_existing: false
 - `brother_scanner_nodename`: optional nodename instead of IP
 - `brother_overwrite_existing`: removes existing Brother registration before adding a new one
 
+### Paperless format recommendation
+
+For `paperless-ngx`, this setup works well in practice:
+
+- standard documents: `PDF (JPG | @:pipeline.medium-quality)` with `300 dpi`
+- mostly text: grayscale at `300 dpi` (or black/white for very small files)
+- photos or color-heavy pages: color scans only when needed
+
+Brother frontpanel scans in this add-on currently use `skey-scanimage` and produce `TIFF` files. `paperless-ngx` can ingest them reliably, but they are usually larger than medium-quality PDF/JPG pipelines.
+
 ## USB vs Network
 
 USB devices:

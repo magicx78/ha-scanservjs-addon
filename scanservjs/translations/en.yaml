@@ -58,7 +58,7 @@ configuration:
     description: Removes an existing Brother entry before re-registering it.
   brother_button_scan_format:
     name: Brother button scan format
-    description: Output format used by Brother Scan to File and Scan to Email button actions, for example jpeg or png.
+    description: Output format used by Brother Scan to File and Scan to Email button actions, for example jpeg or png. For paperless setups, 300dpi and compact formats are usually best.
   brother_button_scan_args_file:
     name: Brother file button scan args
     description: Optional extra scanimage arguments for the Brother Scan to File button, separated by spaces.
