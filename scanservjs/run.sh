@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r12"
+RUNTIME_REVISION="2026-03-16-r13"
 
 log() {
   bashio::log.info "$*"
@@ -151,6 +151,26 @@ write_shell_var() {
   local value="$2"
 
   printf '%s=%q\n' "$name" "$value"
+}
+
+warmup_brother_device() {
+  local device="$1"
+  local attempts=0
+
+  [[ -n "$device" && "$device" != "null" ]] || return 0
+  command -v scanimage >/dev/null 2>&1 || return 0
+
+  while (( attempts < 2 )); do
+    if scanimage -A -d "$device" >/tmp/brother-device-warmup.log 2>&1; then
+      log "Brother Device-Warmup erfolgreich: ${device}"
+      return 0
+    fi
+    attempts=$((attempts + 1))
+    sleep 1
+  done
+
+  warn "Brother Device-Warmup fehlgeschlagen: $(cat /tmp/brother-device-warmup.log 2>/dev/null || printf '<leer>')"
+  return 0
 }
 
 configure_scanimage_discovery() {
@@ -650,6 +670,9 @@ main() {
     log_cmd_output "brscan-skey -l" brscan-skey -l
   fi
   log_cmd_output "scanimage -L" scanimage -L
+  if [[ "$benable" == "true" ]]; then
+    warmup_brother_device "$(first_delim_item "${DEVICES:-}")"
+  fi
 
   local app_dir
   if ! app_dir="$(detect_app_dir)"; then
