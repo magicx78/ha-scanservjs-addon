@@ -258,6 +258,8 @@ scan_via_profile() {
 
   copy_scan_output "${output_file}"
   button_log "info" "scan saved profile=${profile} output=${output_file} size=$(wc -c <"${output_file}" 2>/dev/null || printf '0')"
+  BROTHER_LAST_OUTPUT_FILE="${output_file}"
+  export BROTHER_LAST_OUTPUT_FILE
 }
 
 trigger_webhook() {
@@ -265,6 +267,8 @@ trigger_webhook() {
   local webhook_var="$2"
   local requested_device="${3:-}"
   local friendly_name="${4:-}"
+  local output_file="${5:-}"
+  local output_basename=""
   local webhook_id device payload timestamp
 
   load_button_env
@@ -281,6 +285,9 @@ trigger_webhook() {
   fi
 
   device="$(resolve_device "${requested_device}")"
+  if [[ -n "${output_file}" ]]; then
+    output_basename="$(basename "${output_file}")"
+  fi
   timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   payload="$(jq -nc \
     --arg source 'scanservjs_brother_frontpanel' \
@@ -288,8 +295,11 @@ trigger_webhook() {
     --arg device "${device}" \
     --arg scanner_name "${BROTHER_SCANNER_NAME:-}" \
     --arg friendly_name "${friendly_name}" \
+    --arg output_file "${output_file}" \
+    --arg output_basename "${output_basename}" \
+    --arg copy_scans_to "${COPY_SCANS_TO:-}" \
     --arg timestamp "${timestamp}" \
-    '{source:$source,button:$button,device:$device,scanner_name:$scanner_name,friendly_name:$friendly_name,timestamp:$timestamp}')"
+    '{source:$source,button:$button,device:$device,scanner_name:$scanner_name,friendly_name:$friendly_name,output_file:$output_file,output_basename:$output_basename,copy_scans_to:$copy_scans_to,timestamp:$timestamp}')"
 
   curl -fsS \
     -X POST \
