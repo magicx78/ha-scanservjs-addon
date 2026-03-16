@@ -14,9 +14,12 @@ configuration:
   ocr_lang:
     name: OCR languages
     description: Tesseract OCR languages, for example deu+eng.
+  copy_scans_to_mode:
+    name: Scan target mode
+    description: auto detects /share/paperless/consume, paperless forces it, custom uses the custom path.
   copy_scans_to:
-    name: Copy scans to
-    description: Directory where completed scans are copied.
+    name: Custom scan target path
+    description: Destination directory for completed scans in custom mode or as fallback in auto mode.
   brother_enable:
     name: Enable Brother support
     description: Activates optional Brother brscan4 setup logic.

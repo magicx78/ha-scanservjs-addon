@@ -1,5 +1,5 @@
 name: "scanservjs Scan Server"
-version: "1.0.5"
+version: "1.0.6"
 slug: "scanservjs"
 description: "scanservjs Web-UI fuer Scanner (SANE) - optional mit Brother brscan4 Auto-Install und MFC-L2700DW Netzwerk-Registrierung."
 url: "https://github.com/magicx78/ha-scanservjs-addon"
@@ -41,6 +41,7 @@ options:
   scanimage_list_ignore: false
   devices: ""
   ocr_lang: "deu+eng"
+  copy_scans_to_mode: "custom"
   copy_scans_to: "/share/paperless/consume"
 
   brother_enable: false
@@ -68,6 +69,7 @@ schema:
   scanimage_list_ignore: bool?
   devices: str?
   ocr_lang: str?
+  copy_scans_to_mode: list(auto|paperless|custom)?
   copy_scans_to: str?
 
   brother_enable: bool?

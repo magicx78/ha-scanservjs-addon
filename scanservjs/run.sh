@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r21"
+RUNTIME_REVISION="2026-03-16-r22"
 
 log() {
   bashio::log.info "$*"
@@ -120,6 +120,32 @@ ensure_generic_airscan_fallbacks() {
   ensure_airscan_config
   ensure_line "Generic eSCL = http://${ip}/eSCL, eSCL" "/etc/sane.d/airscan.conf"
   ensure_line "Generic WSD = http://${ip}/WebServices/ScannerService, WSD" "/etc/sane.d/airscan.conf"
+}
+
+resolve_copy_scans_to() {
+  local mode="$1"
+  local custom_path="$2"
+  local paperless_path="/share/paperless/consume"
+
+  case "$mode" in
+    auto|"")
+      if [[ -d "$paperless_path" ]]; then
+        printf "%s\n" "$paperless_path"
+      else
+        printf "%s\n" "$custom_path"
+      fi
+      ;;
+    paperless)
+      printf "%s\n" "$paperless_path"
+      ;;
+    custom)
+      printf "%s\n" "$custom_path"
+      ;;
+    *)
+      warn "Unbekannter copy_scans_to_mode=${mode}; verwende custom."
+      printf "%s\n" "$custom_path"
+      ;;
+  esac
 }
 
 split_delim_lines() {
@@ -622,7 +648,10 @@ main() {
   SCANIMAGE_LIST_IGNORE="$(opt '.scanimage_list_ignore // false')"
   DEVICES="$(opt '.devices // ""')"
   OCR_LANG="$(opt '.ocr_lang // "eng"')"
-  COPY_SCANS_TO="$(opt '.copy_scans_to // ""')"
+  local copy_scans_to_mode copy_scans_to_custom
+  copy_scans_to_mode="$(opt '.copy_scans_to_mode // "custom"')"
+  copy_scans_to_custom="$(opt '.copy_scans_to // ""')"
+  COPY_SCANS_TO="$(resolve_copy_scans_to "$copy_scans_to_mode" "$copy_scans_to_custom")"
   BROTHER_BUTTON_SCAN_FORMAT="$(opt '.brother_button_scan_format // "jpeg"')"
   BROTHER_BUTTON_SCAN_ARGS_FILE="$(opt '.brother_button_scan_args_file // ""')"
   BROTHER_BUTTON_SCAN_ARGS_EMAIL="$(opt '.brother_button_scan_args_email // ""')"
@@ -635,8 +664,17 @@ main() {
 
   ensure_line "airscan" "/etc/sane.d/dll.conf"
 
+  if [[ "$copy_scans_to_mode" == "auto" ]]; then
+    if [[ "$COPY_SCANS_TO" == "/share/paperless/consume" && -d "/share/paperless/consume" ]]; then
+      log "COPY_SCANS_TO auto: Paperless-Verzeichnis erkannt (${COPY_SCANS_TO})"
+    else
+      log "COPY_SCANS_TO auto: kein Paperless-Verzeichnis erkannt, verwende Wunschpfad (${COPY_SCANS_TO:-<leer>})"
+    fi
+  else
+    log "COPY_SCANS_TO mode=${copy_scans_to_mode} pfad=${COPY_SCANS_TO:-<leer>}"
+  fi
+
   if [[ -n "$COPY_SCANS_TO" && "$COPY_SCANS_TO" != "null" ]]; then
-    log "COPY_SCANS_TO=${COPY_SCANS_TO}"
     mkdir -p "$COPY_SCANS_TO" || true
   fi
 

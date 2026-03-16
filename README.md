@@ -62,6 +62,7 @@ airscan_devices: ""
 scanimage_list_ignore: false
 devices: ""
 ocr_lang: "deu+eng"
+copy_scans_to_mode: custom
 copy_scans_to: "/share/paperless/consume"
 brother_enable: false
 ```
@@ -74,6 +75,7 @@ airscan_devices: ""
 scanimage_list_ignore: false
 devices: ""
 ocr_lang: "deu+eng"
+copy_scans_to_mode: custom
 copy_scans_to: "/share/paperless/consume"
 brother_enable: true
 brother_accept_eula: true
@@ -96,7 +98,8 @@ brother_overwrite_existing: false
 - `scanimage_list_ignore`: optional scanservjs environment toggle
 - `devices`: optional device filter forwarded to scanservjs
 - `ocr_lang`: Tesseract OCR language selection such as `deu+eng`
-- `copy_scans_to`: target directory for completed scans
+- `copy_scans_to_mode`: `auto`, `paperless`, or `custom`
+- `copy_scans_to`: custom target directory for completed scans, also used as fallback in `auto` mode
 - `brother_enable`: enables Brother setup logic
 - `brother_accept_eula`: required before proprietary Brother download or install
 - `brother_driver_source`: `auto`, `url`, or `local`
