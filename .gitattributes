@@ -3,4 +3,6 @@ Dockerfile text eol=lf
 *.js text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
-README.md text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+VERSION text eol=lf
