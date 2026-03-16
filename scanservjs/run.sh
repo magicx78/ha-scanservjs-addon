@@ -141,6 +141,8 @@ install_brscan4() {
   local sha="$4"
   local local_path="$5"
   local deb="/tmp/brscan4.amd64.deb"
+  local skey_deb="/tmp/brscan-skey.amd64.deb"
+  local skey_url="https://download.brother.com/pub/com/linux/linux/packages/brscan-skey-0.3.2-0.amd64.deb"
 
   if [[ "$accept" != "true" ]]; then
     warn "brother_enable=true, aber brother_accept_eula=false - Treiberinstallation uebersprungen."
@@ -191,10 +193,13 @@ install_brscan4() {
   fi
 
   dpkg -i "$deb" || true
+  curl -fL --retry 3 --retry-delay 2 -o "$skey_deb" "$skey_url"
+  dpkg -i "$skey_deb" || true
   apt-get -y -f install
   apt-get clean
   rm -rf /var/lib/apt/lists/*
   rm -f "$deb"
+  rm -f "$skey_deb"
   ensure_line "brother4" "/etc/sane.d/dll.conf"
 }
 
