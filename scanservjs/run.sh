@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r8"
+RUNTIME_REVISION="2026-03-16-r9"
 
 log() {
   bashio::log.info "$*"
@@ -55,6 +55,18 @@ normalize_brother_model() {
       printf "%s\n" "$model"
       ;;
   esac
+}
+
+sanitize_brother_scan_key_name() {
+  local name="$1"
+  local sanitized
+
+  sanitized="$(printf "%s" "$name" | tr -cd '[:alnum:]')"
+  if [[ -z "$sanitized" ]]; then
+    sanitized="Brother"
+  fi
+
+  printf "%.15s\n" "$sanitized"
 }
 
 detect_app_dir() {
@@ -438,8 +450,25 @@ configure_brscan_skey() {
   log "brscan-skey config: eth=${iface:-<leer>} ip_address=${source_ip:-<leer>}"
 }
 
+configure_brscan_skey_name() {
+  local requested_name="$1"
+  local display_name
+  local output
+
+  command -v brscan-skey >/dev/null 2>&1 || return 0
+
+  display_name="$(sanitize_brother_scan_key_name "$requested_name")"
+  if output="$(brscan-skey -u "$display_name" 2>&1)"; then
+    log "brscan-skey Zielname gesetzt: ${display_name}"
+    [[ -n "$output" ]] && log "brscan-skey -u: ${output}"
+  else
+    warn "brscan-skey Zielname konnte nicht gesetzt werden: ${output:-<leer>}"
+  fi
+}
+
 start_brscan_skey() {
   local skey_bin=""
+  local skey_proc="brscan-skey-exe"
   if command -v brscan-skey >/dev/null 2>&1; then
     skey_bin="$(command -v brscan-skey)"
   elif [[ -x /opt/brother/scanner/brscan-skey/brscan-skey ]]; then
@@ -449,19 +478,20 @@ start_brscan_skey() {
     return 0
   fi
 
-  if pgrep -x brscan-skey >/dev/null 2>&1; then
+  if pgrep -x "$skey_proc" >/dev/null 2>&1 || pgrep -x brscan-skey >/dev/null 2>&1; then
     log "brscan-skey laeuft bereits"
     return 0
   fi
 
-  "${skey_bin}" >/tmp/brscan-skey.log 2>&1 &
+  "${skey_bin}" -f >/tmp/brscan-skey.log 2>&1 &
   sleep 1
 
-  if pgrep -x brscan-skey >/dev/null 2>&1; then
+  if pgrep -x "$skey_proc" >/dev/null 2>&1 || pgrep -x brscan-skey >/dev/null 2>&1; then
     log "brscan-skey gestartet"
   else
     warn "brscan-skey konnte nicht gestartet werden"
     [[ -f /tmp/brscan-skey.log ]] && warn "brscan-skey log: $(tail -n 20 /tmp/brscan-skey.log)"
+    log_cmd_output "brscan-skey --diagnosis" brscan-skey --diagnosis
   fi
 }
 
@@ -594,6 +624,7 @@ main() {
     if [[ -n "$bip" && "$bip" != "null" ]]; then
       configure_brscan_skey "$bip"
     fi
+    configure_brscan_skey_name "$bname"
     install_brother_button_scripts
     write_brother_button_env "$bname"
     start_brscan_skey
