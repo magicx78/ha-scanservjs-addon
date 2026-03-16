@@ -58,10 +58,10 @@ configuration:
     description: Entfernt einen vorhandenen Brother-Eintrag vor der Neuregistrierung.
   brother_button_output_dir:
     name: Brother-Button-Ausgabeverzeichnis
-    description: Optionales Verzeichnis fuer Brother-Button-Scans. Leer = scanservjs Datenordner (sichtbar unter Dateien).
+    description: Optionales Verzeichnis fuer Brother-Button-Scans. Leer = scanservjs Datenordner (sichtbar unter Dateien-Tab).
   brother_button_default_resolution:
     name: Brother-Standardauflosung (DPI)
-    description: Standard-DPI fuer Brother-Button-Scans, wenn im Brother-Profil keine Aufloesung gesetzt ist. Fuer OCR meist 300 empfohlen.
+    description: "Standard-DPI fuer Brother-Button-Scans, wenn im Brother-Profil keine Aufloesung gesetzt ist. Empfehlung fuer OCR: 300 (600 nur fuer sehr kleine Schrift)."
   brother_button_scan_format:
     name: Brother-Tasten Scanformat
     description: Ausgabeformat fuer Brother Scan to File und Scan to Email, z.B. jpeg oder png. Fuer Paperless sind 300dpi und eher kompakte Formate sinnvoll.
@@ -73,16 +73,16 @@ configuration:
     description: Ausgabeformat fuer Brother Scan to OCR (native, jpg, pdf, tiff).
   brother_copy_file_to_target:
     name: File nach Ziel kopieren
-    description: Kopiert Brother Scan to File nach copy_scans_to.
+    description: true = Scan to File wird nach copy_scans_to kopiert (z.B. Paperless).
   brother_copy_email_to_target:
     name: Email nach Ziel kopieren
-    description: Kopiert Brother Scan to Email nach copy_scans_to.
+    description: true = Scan to Email wird nach copy_scans_to kopiert.
   brother_copy_image_to_target:
     name: Image nach Ziel kopieren
-    description: Kopiert Brother Scan to Image nach copy_scans_to.
+    description: false = Image bleibt im scanservjs Dateien-Tab; true = auch nach copy_scans_to kopieren.
   brother_copy_ocr_to_target:
     name: OCR nach Ziel kopieren
-    description: Kopiert Brother Scan to OCR nach copy_scans_to.
+    description: false = OCR bleibt im scanservjs Dateien-Tab; true = auch nach copy_scans_to kopieren.
   brother_button_scan_args_file:
     name: Brother-Datei-Taste Scanargumente
     description: Optionale zusaetzliche scanimage-Argumente fuer Scan to File, durch Leerzeichen getrennt.

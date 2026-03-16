@@ -148,6 +148,38 @@ Recommended Brother frontpanel settings for OCR-heavy workflows:
 Brother frontpanel scans in this add-on currently use `skey-scanimage` and produce `TIFF` files. `paperless-ngx` can ingest them reliably, but they are usually larger than medium-quality PDF/JPG pipelines.
 When `copy_scans_to` points to `/share/paperless...`, Brother button `TIFF` files are automatically converted to `JPG` before copying to improve Paperless ingest compatibility.
 
+### Presets (quick start)
+
+Preset A: Paperless for File/Email, Image/OCR in scanservjs Files (recommended)
+
+```yaml
+copy_scans_to_mode: auto
+copy_scans_to: "/share/paperless/consume"
+brother_button_output_dir: ""            # empty = scanservjs data/output (Files tab)
+brother_button_default_resolution: 300
+brother_image_output_format: "jpg"
+brother_ocr_output_format: "pdf"
+brother_copy_file_to_target: true
+brother_copy_email_to_target: true
+brother_copy_image_to_target: false
+brother_copy_ocr_to_target: false
+```
+
+Preset B: everything to target directory
+
+```yaml
+copy_scans_to_mode: custom
+copy_scans_to: "/share/scans-all"
+brother_button_output_dir: ""
+brother_button_default_resolution: 300
+brother_image_output_format: "jpg"
+brother_ocr_output_format: "pdf"
+brother_copy_file_to_target: true
+brother_copy_email_to_target: true
+brother_copy_image_to_target: true
+brother_copy_ocr_to_target: true
+```
+
 ## USB vs Network
 
 USB devices:
