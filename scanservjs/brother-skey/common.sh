@@ -36,7 +36,11 @@ button_timestamp() {
 }
 
 button_output_dir() {
-  printf '/data/output\n'
+  if [[ -n "${BROTHER_BUTTON_OUTPUT_DIR:-}" && "${BROTHER_BUTTON_OUTPUT_DIR}" != "null" ]]; then
+    printf '%s\n' "${BROTHER_BUTTON_OUTPUT_DIR}"
+  else
+    printf '/data/output\n'
+  fi
 }
 
 button_profile_config_path() {

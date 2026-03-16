@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r25"
+RUNTIME_REVISION="2026-03-16-r26"
 
 log() {
   bashio::log.info "$*"
@@ -342,7 +342,7 @@ install_brother_button_scripts() {
 
 write_brother_button_env() {
   local scanner_name="$1"
-  local env_file default_device
+  local env_file default_device output_dir app_dir_detected
 
   env_file="$(brother_button_target_dir)/scanservjs.env"
   mkdir -p "$(dirname "$env_file")"
@@ -355,8 +355,17 @@ write_brother_button_env() {
     default_device="$(probe_brother_device_ids | head -n 1 || true)"
   fi
 
+  output_dir="/data/output"
+  if app_dir_detected="$(detect_app_dir 2>/dev/null)"; then
+    output_dir="${app_dir_detected}/data/output"
+  fi
+  if [[ -n "${BROTHER_BUTTON_OUTPUT_DIR_OVERRIDE:-}" && "${BROTHER_BUTTON_OUTPUT_DIR_OVERRIDE}" != "null" ]]; then
+    output_dir="${BROTHER_BUTTON_OUTPUT_DIR_OVERRIDE}"
+  fi
+
   {
     write_shell_var "COPY_SCANS_TO" "${COPY_SCANS_TO:-}"
+    write_shell_var "BROTHER_BUTTON_OUTPUT_DIR" "${output_dir}"
     write_shell_var "BROTHER_BUTTON_DEFAULT_RESOLUTION" "${BROTHER_BUTTON_DEFAULT_RESOLUTION:-300}"
     write_shell_var "BROTHER_BUTTON_SCAN_FORMAT" "${BROTHER_BUTTON_SCAN_FORMAT:-jpeg}"
     write_shell_var "BROTHER_IMAGE_OUTPUT_FORMAT" "${BROTHER_IMAGE_OUTPUT_FORMAT:-jpg}"
@@ -375,9 +384,10 @@ write_brother_button_env() {
   } > "$env_file"
 
   chmod 600 "$env_file"
+  mkdir -p "${output_dir}" 2>/dev/null || true
   BROTHER_DEFAULT_DEVICE_RESOLVED="${default_device}"
   export BROTHER_DEFAULT_DEVICE_RESOLVED
-  log "Brother Button-Umgebung geschrieben: ${env_file}"
+  log "Brother Button-Umgebung geschrieben: ${env_file} (output=${output_dir})"
 }
 
 brother_is_registered() {
@@ -640,6 +650,7 @@ register_brother() {
 
 main() {
   export SANED_NET_HOSTS AIRSCAN_DEVICES SCANIMAGE_LIST_IGNORE DEVICES OCR_LANG COPY_SCANS_TO
+  export BROTHER_BUTTON_OUTPUT_DIR_OVERRIDE
   export BROTHER_BUTTON_DEFAULT_RESOLUTION BROTHER_BUTTON_SCAN_FORMAT BROTHER_BUTTON_SCAN_ARGS_FILE BROTHER_BUTTON_SCAN_ARGS_EMAIL
   export BROTHER_IMAGE_OUTPUT_FORMAT BROTHER_OCR_OUTPUT_FORMAT
   export BROTHER_COPY_FILE_TO_TARGET BROTHER_COPY_EMAIL_TO_TARGET BROTHER_COPY_IMAGE_TO_TARGET BROTHER_COPY_OCR_TO_TARGET
@@ -661,6 +672,7 @@ main() {
   copy_scans_to_mode="$(opt '.copy_scans_to_mode // "custom"')"
   copy_scans_to_custom="$(opt '.copy_scans_to // ""')"
   COPY_SCANS_TO="$(resolve_copy_scans_to "$copy_scans_to_mode" "$copy_scans_to_custom")"
+  BROTHER_BUTTON_OUTPUT_DIR_OVERRIDE="$(opt '.brother_button_output_dir // ""')"
   BROTHER_BUTTON_DEFAULT_RESOLUTION="$(opt '.brother_button_default_resolution // 300')"
   BROTHER_BUTTON_SCAN_FORMAT="$(opt '.brother_button_scan_format // "jpeg"')"
   BROTHER_IMAGE_OUTPUT_FORMAT="$(opt '.brother_image_output_format // "jpg"')"

@@ -1,5 +1,5 @@
 name: "scanservjs Scan Server"
-version: "1.0.9"
+version: "1.0.10"
 slug: "scanservjs"
 description: "scanservjs Web-UI fuer Scanner (SANE) - optional mit Brother brscan4 Auto-Install und MFC-L2700DW Netzwerk-Registrierung."
 url: "https://github.com/magicx78/ha-scanservjs-addon"
@@ -57,6 +57,7 @@ options:
   brother_scanner_ip: ""
   brother_scanner_nodename: ""
   brother_overwrite_existing: false
+  brother_button_output_dir: ""
   brother_button_default_resolution: 300
   brother_button_scan_format: "jpeg"
   brother_image_output_format: "jpg"
@@ -91,6 +92,7 @@ schema:
   brother_scanner_ip: str?
   brother_scanner_nodename: str?
   brother_overwrite_existing: bool?
+  brother_button_output_dir: str?
   brother_button_default_resolution: int?
   brother_button_scan_format: str?
   brother_image_output_format: list(native|jpg|pdf|tiff)?

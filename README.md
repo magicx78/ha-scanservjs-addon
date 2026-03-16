@@ -89,6 +89,7 @@ brother_scanner_model: "MFC-L2700DW"
 brother_scanner_ip: "192.168.1.50"
 brother_scanner_nodename: ""
 brother_overwrite_existing: false
+brother_button_output_dir: ""
 brother_button_default_resolution: 300
 brother_image_output_format: "jpg"
 brother_ocr_output_format: "pdf"
@@ -119,6 +120,7 @@ brother_copy_ocr_to_target: false
 - `brother_scanner_ip`: scanner IP for network registration
 - `brother_scanner_nodename`: optional nodename instead of IP
 - `brother_overwrite_existing`: removes existing Brother registration before adding a new one
+- `brother_button_output_dir`: optional Brother button output directory; empty uses scanservjs `data/output` (shown in Files tab)
 - `brother_button_default_resolution`: default Brother frontpanel DPI fallback, recommended `300` for OCR
 - `brother_image_output_format`: output format for Brother `Scan to Image` (`native`, `jpg`, `pdf`, `tiff`)
 - `brother_ocr_output_format`: output format for Brother `Scan to OCR` (`native`, `jpg`, `pdf`, `tiff`)

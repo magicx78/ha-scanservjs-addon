@@ -56,6 +56,9 @@ configuration:
   brother_overwrite_existing:
     name: Overwrite Brother registration
     description: Removes an existing Brother entry before re-registering it.
+  brother_button_output_dir:
+    name: Brother button output directory
+    description: Optional output directory for Brother button scans. Empty uses the scanservjs data folder (visible in Files).
   brother_button_default_resolution:
     name: Brother default resolution (DPI)
     description: Default DPI for Brother button scans when no profile resolution is set. 300 is usually best for OCR.

@@ -56,6 +56,9 @@ configuration:
   brother_overwrite_existing:
     name: Vorhandene Brother-Registrierung ueberschreiben
     description: Entfernt einen vorhandenen Brother-Eintrag vor der Neuregistrierung.
+  brother_button_output_dir:
+    name: Brother-Button-Ausgabeverzeichnis
+    description: Optionales Verzeichnis fuer Brother-Button-Scans. Leer = scanservjs Datenordner (sichtbar unter Dateien).
   brother_button_default_resolution:
     name: Brother-Standardauflosung (DPI)
     description: Standard-DPI fuer Brother-Button-Scans, wenn im Brother-Profil keine Aufloesung gesetzt ist. Fuer OCR meist 300 empfohlen.
