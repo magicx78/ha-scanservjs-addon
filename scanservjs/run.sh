@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r10"
+RUNTIME_REVISION="2026-03-16-r12"
 
 log() {
   bashio::log.info "$*"
@@ -55,52 +55,6 @@ normalize_brother_model() {
       printf "%s\n" "$model"
       ;;
   esac
-}
-
-sanitize_brother_scan_key_name() {
-  local name="$1"
-  local sanitized
-
-  sanitized="$(printf "%s" "$name" | tr -cd '[:alnum:]')"
-  if [[ -z "$sanitized" ]]; then
-    sanitized="Brother"
-  fi
-
-  printf "%.15s\n" "$sanitized"
-}
-
-resolve_brscan_skey_wrapper_bin() {
-  if command -v brscan-skey >/dev/null 2>&1; then
-    command -v brscan-skey
-    return 0
-  fi
-
-  if [[ -x /opt/brother/scanner/brscan-skey/brscan-skey ]]; then
-    printf "%s\n" "/opt/brother/scanner/brscan-skey/brscan-skey"
-    return 0
-  fi
-
-  return 1
-}
-
-resolve_brscan_skey_exec_bin() {
-  local wrapper_bin
-
-  if [[ -x /opt/brother/scanner/brscan-skey/brscan-skey-exe ]]; then
-    printf "%s\n" "/opt/brother/scanner/brscan-skey/brscan-skey-exe"
-    return 0
-  fi
-
-  if wrapper_bin="$(resolve_brscan_skey_wrapper_bin 2>/dev/null)"; then
-    local candidate
-    candidate="$(dirname "$wrapper_bin")/brscan-skey-exe"
-    if [[ -x "$candidate" ]]; then
-      printf "%s\n" "$candidate"
-      return 0
-    fi
-  fi
-
-  return 1
 }
 
 detect_app_dir() {
@@ -365,6 +319,24 @@ brother_is_registered() {
   return 1
 }
 
+resolve_brother_registered_ip() {
+  local name="$1"
+  local qout line
+
+  command -v brsaneconfig4 >/dev/null 2>&1 || return 1
+  qout="$(brsaneconfig4 -q 2>/dev/null || true)"
+
+  while IFS= read -r line; do
+    [[ -n "$name" && "$line" == *"$name"* ]] || continue
+    if [[ "$line" =~ \[[[:space:]]*([0-9.]+)\] ]]; then
+      printf "%s\n" "${BASH_REMATCH[1]}"
+      return 0
+    fi
+  done <<<"$qout"
+
+  return 1
+}
+
 install_brscan4() {
   local accept="$1"
   local source="$2"
@@ -484,33 +456,13 @@ configure_brscan_skey() {
   log "brscan-skey config: eth=${iface:-<leer>} ip_address=${source_ip:-<leer>}"
 }
 
-configure_brscan_skey_name() {
-  local requested_name="$1"
-  local display_name
-  local output
-  local skey_exec_bin
-
-  if ! skey_exec_bin="$(resolve_brscan_skey_exec_bin 2>/dev/null)"; then
-    return 0
-  fi
-
-  display_name="$(sanitize_brother_scan_key_name "$requested_name")"
-  if output="$("$skey_exec_bin" -u "$display_name" 2>&1)"; then
-    log "brscan-skey Zielname gesetzt: ${display_name}"
-    [[ -n "$output" ]] && log "brscan-skey -u: ${output}"
-  else
-    warn "brscan-skey Zielname konnte nicht gesetzt werden: ${output:-<leer>}"
-  fi
-}
-
 start_brscan_skey() {
   local skey_bin=""
   local skey_proc="brscan-skey-exe"
-  local skey_diag_bin=""
-  if skey_bin="$(resolve_brscan_skey_exec_bin 2>/dev/null)"; then
-    skey_diag_bin="$skey_bin"
-  elif skey_bin="$(resolve_brscan_skey_wrapper_bin 2>/dev/null)"; then
-    skey_diag_bin="$skey_bin"
+  if command -v brscan-skey >/dev/null 2>&1; then
+    skey_bin="$(command -v brscan-skey)"
+  elif [[ -x /opt/brother/scanner/brscan-skey/brscan-skey ]]; then
+    skey_bin="/opt/brother/scanner/brscan-skey/brscan-skey"
   else
     warn "brscan-skey Binary nicht gefunden."
     return 0
@@ -521,7 +473,7 @@ start_brscan_skey() {
     return 0
   fi
 
-  "${skey_bin}" -f >/tmp/brscan-skey.log 2>&1 &
+  "${skey_bin}" >/tmp/brscan-skey.log 2>&1 &
   sleep 1
 
   if pgrep -x "$skey_proc" >/dev/null 2>&1 || pgrep -x brscan-skey >/dev/null 2>&1; then
@@ -529,7 +481,6 @@ start_brscan_skey() {
   else
     warn "brscan-skey konnte nicht gestartet werden"
     [[ -f /tmp/brscan-skey.log ]] && warn "brscan-skey log: $(tail -n 20 /tmp/brscan-skey.log)"
-    log_cmd_output "brscan-skey --diagnosis" "$skey_diag_bin" --diagnosis
   fi
 }
 
@@ -558,8 +509,8 @@ register_brother() {
   fi
 
   if [[ -z "$nodename" || "$nodename" == "null" ]] && [[ -z "$ip" || "$ip" == "null" ]]; then
-    err "brother_scanner_ip fehlt. Alternativ brother_scanner_nodename setzen."
-    return 1
+    warn "brother_scanner_ip fehlt. Alternativ brother_scanner_nodename setzen. Brother-Registrierung wird uebersprungen."
+    return 0
   fi
 
   effective_model="$(normalize_brother_model "$model")"
@@ -641,7 +592,7 @@ main() {
     log "Brother Support per ENABLE_BROTHER_SUPPORT=false deaktiviert"
   fi
   if [[ "$benable" == "true" ]]; then
-    local baccept bsrc burl bsha blocal doreg bname bmodel bip bnode bow
+    local baccept bsrc burl bsha blocal doreg bname bmodel bip bnode bow recovered_ip
     log "Brother Support aktiviert"
     baccept="$(opt '.brother_accept_eula // false')"
     bsrc="$(opt '.brother_driver_source // "auto"')"
@@ -655,6 +606,14 @@ main() {
     bnode="$(opt '.brother_scanner_nodename // ""')"
     bow="$(opt '.brother_overwrite_existing // false')"
 
+    if [[ -z "$bip" || "$bip" == "null" ]] && [[ -z "$bnode" || "$bnode" == "null" ]]; then
+      recovered_ip="$(resolve_brother_registered_ip "$bname" || true)"
+      if [[ -n "$recovered_ip" ]]; then
+        bip="$recovered_ip"
+        log "Brother Scanner-IP aus bestehender Registrierung uebernommen: ${bip}"
+      fi
+    fi
+
     install_brscan4 "$baccept" "$bsrc" "$burl" "$bsha" "$blocal"
     ensure_brother_sane_links
     setup_brother_library_paths
@@ -662,7 +621,6 @@ main() {
     if [[ -n "$bip" && "$bip" != "null" ]]; then
       configure_brscan_skey "$bip"
     fi
-    configure_brscan_skey_name "$bname"
     install_brother_button_scripts
     write_brother_button_env "$bname"
     start_brscan_skey
