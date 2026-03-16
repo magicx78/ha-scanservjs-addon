@@ -154,7 +154,7 @@ append_skey_args() {
   if [[ -n "${resolution:-}" ]]; then
     args_ref+=("--resolution" "${resolution}")
   else
-    args_ref+=("--resolution" "100")
+    args_ref+=("--resolution" "${BROTHER_BUTTON_DEFAULT_RESOLUTION:-300}")
   fi
 
   if [[ -n "${source:-}" ]]; then
@@ -176,6 +176,126 @@ append_skey_args() {
 
 paperless_target_enabled() {
   [[ "${COPY_SCANS_TO:-}" == /share/paperless* ]]
+}
+
+copy_to_target_enabled_for_profile() {
+  local profile="$1"
+
+  case "$profile" in
+    file)
+      [[ "${BROTHER_COPY_FILE_TO_TARGET:-true}" == "true" ]]
+      ;;
+    email)
+      [[ "${BROTHER_COPY_EMAIL_TO_TARGET:-true}" == "true" ]]
+      ;;
+    image)
+      [[ "${BROTHER_COPY_IMAGE_TO_TARGET:-false}" == "true" ]]
+      ;;
+    ocr)
+      [[ "${BROTHER_COPY_OCR_TO_TARGET:-false}" == "true" ]]
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+normalize_profile_output_format() {
+  local profile="$1"
+  local format="native"
+
+  case "$profile" in
+    image)
+      format="${BROTHER_IMAGE_OUTPUT_FORMAT:-jpg}"
+      ;;
+    ocr)
+      format="${BROTHER_OCR_OUTPUT_FORMAT:-pdf}"
+      ;;
+    *)
+      format="native"
+      ;;
+  esac
+
+  format="$(printf '%s' "$format" | tr '[:upper:]' '[:lower:]')"
+  case "$format" in
+    native|jpg|jpeg|pdf|tif|tiff)
+      ;;
+    *)
+      button_log "warn" "unknown output format for profile=${profile}: ${format}. fallback=native"
+      format="native"
+      ;;
+  esac
+
+  case "$format" in
+    jpg)
+      format="jpeg"
+      ;;
+    tif)
+      format="tiff"
+      ;;
+  esac
+
+  printf '%s\n' "$format"
+}
+
+convert_profile_output() {
+  local profile="$1"
+  local output_file="$2"
+  local target_format converted_file ext
+
+  ext="${output_file##*.}"
+  ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+
+  target_format="$(normalize_profile_output_format "$profile")"
+  case "$target_format" in
+    native|tiff)
+      printf '%s\n' "$output_file"
+      return 0
+      ;;
+    jpeg)
+      if [[ "$ext" == "jpg" || "$ext" == "jpeg" ]]; then
+        printf '%s\n' "$output_file"
+        return 0
+      fi
+      converted_file="${output_file%.*}.jpg"
+      ;;
+    pdf)
+      if [[ "$ext" == "pdf" ]]; then
+        printf '%s\n' "$output_file"
+        return 0
+      fi
+      converted_file="${output_file%.*}.pdf"
+      ;;
+    *)
+      printf '%s\n' "$output_file"
+      return 0
+      ;;
+  esac
+
+  if ! command -v convert >/dev/null 2>&1; then
+    button_log "warn" "output conversion skipped for profile=${profile}: convert not found"
+    return 1
+  fi
+
+  if [[ "$target_format" == "pdf" ]]; then
+    if convert "${output_file}" -strip -compress jpeg -quality 90 "${converted_file}" >/tmp/scanservjs-brother-convert.log 2>&1 && [[ -s "${converted_file}" ]]; then
+      button_log "info" "output conversion created ${converted_file} for profile=${profile}"
+      rm -f "${output_file}"
+      printf '%s\n' "${converted_file}"
+      return 0
+    fi
+  else
+    if convert "${output_file}" -strip -quality 92 "${converted_file}" >/tmp/scanservjs-brother-convert.log 2>&1 && [[ -s "${converted_file}" ]]; then
+      button_log "info" "output conversion created ${converted_file} for profile=${profile}"
+      rm -f "${output_file}"
+      printf '%s\n' "${converted_file}"
+      return 0
+    fi
+  fi
+
+  button_log "warn" "output conversion failed for profile=${profile} file=${output_file}: $(cat /tmp/scanservjs-brother-convert.log 2>/dev/null || printf '<leer>')"
+  rm -f "${converted_file}"
+  return 1
 }
 
 prepare_paperless_copy_source() {
@@ -211,11 +331,17 @@ prepare_paperless_copy_source() {
 
 copy_scan_output() {
   local output_file="$1"
+  local profile="$2"
   local copy_file="${output_file}"
   local cleanup_copy_file="false"
   local converted_file=""
 
   if [[ -z "${COPY_SCANS_TO:-}" || "${COPY_SCANS_TO}" == "null" ]]; then
+    return 0
+  fi
+
+  if ! copy_to_target_enabled_for_profile "$profile"; then
+    button_log "info" "copy skipped for profile=${profile}: copy_to_target disabled"
     return 0
   fi
 
@@ -245,7 +371,7 @@ scan_via_profile() {
   local profile="$1"
   local requested_device="${2:-}"
   local friendly_name="${3:-}"
-  local device format ext output_dir output_file
+  local device format ext output_dir output_file final_output_file converted_output_file
   local skey_bin=""
   local -a scan_args=()
 
@@ -307,9 +433,14 @@ scan_via_profile() {
     exit 1
   fi
 
-  copy_scan_output "${output_file}"
-  button_log "info" "scan saved profile=${profile} output=${output_file} size=$(wc -c <"${output_file}" 2>/dev/null || printf '0')"
-  BROTHER_LAST_OUTPUT_FILE="${output_file}"
+  final_output_file="${output_file}"
+  if converted_output_file="$(convert_profile_output "${profile}" "${output_file}")"; then
+    final_output_file="${converted_output_file}"
+  fi
+
+  copy_scan_output "${final_output_file}" "${profile}"
+  button_log "info" "scan saved profile=${profile} output=${final_output_file} size=$(wc -c <"${final_output_file}" 2>/dev/null || printf '0')"
+  BROTHER_LAST_OUTPUT_FILE="${final_output_file}"
   export BROTHER_LAST_OUTPUT_FILE
 }
 

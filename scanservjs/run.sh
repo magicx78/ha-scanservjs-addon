@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r24"
+RUNTIME_REVISION="2026-03-16-r25"
 
 log() {
   bashio::log.info "$*"
@@ -357,7 +357,14 @@ write_brother_button_env() {
 
   {
     write_shell_var "COPY_SCANS_TO" "${COPY_SCANS_TO:-}"
+    write_shell_var "BROTHER_BUTTON_DEFAULT_RESOLUTION" "${BROTHER_BUTTON_DEFAULT_RESOLUTION:-300}"
     write_shell_var "BROTHER_BUTTON_SCAN_FORMAT" "${BROTHER_BUTTON_SCAN_FORMAT:-jpeg}"
+    write_shell_var "BROTHER_IMAGE_OUTPUT_FORMAT" "${BROTHER_IMAGE_OUTPUT_FORMAT:-jpg}"
+    write_shell_var "BROTHER_OCR_OUTPUT_FORMAT" "${BROTHER_OCR_OUTPUT_FORMAT:-pdf}"
+    write_shell_var "BROTHER_COPY_FILE_TO_TARGET" "${BROTHER_COPY_FILE_TO_TARGET:-true}"
+    write_shell_var "BROTHER_COPY_EMAIL_TO_TARGET" "${BROTHER_COPY_EMAIL_TO_TARGET:-true}"
+    write_shell_var "BROTHER_COPY_IMAGE_TO_TARGET" "${BROTHER_COPY_IMAGE_TO_TARGET:-false}"
+    write_shell_var "BROTHER_COPY_OCR_TO_TARGET" "${BROTHER_COPY_OCR_TO_TARGET:-false}"
     write_shell_var "BROTHER_BUTTON_SCAN_ARGS_FILE" "${BROTHER_BUTTON_SCAN_ARGS_FILE:-}"
     write_shell_var "BROTHER_BUTTON_SCAN_ARGS_EMAIL" "${BROTHER_BUTTON_SCAN_ARGS_EMAIL:-}"
     write_shell_var "BROTHER_TRIGGER_IMAGE_WEBHOOK_ID" "${BROTHER_TRIGGER_IMAGE_WEBHOOK_ID:-}"
@@ -633,7 +640,9 @@ register_brother() {
 
 main() {
   export SANED_NET_HOSTS AIRSCAN_DEVICES SCANIMAGE_LIST_IGNORE DEVICES OCR_LANG COPY_SCANS_TO
-  export BROTHER_BUTTON_SCAN_FORMAT BROTHER_BUTTON_SCAN_ARGS_FILE BROTHER_BUTTON_SCAN_ARGS_EMAIL
+  export BROTHER_BUTTON_DEFAULT_RESOLUTION BROTHER_BUTTON_SCAN_FORMAT BROTHER_BUTTON_SCAN_ARGS_FILE BROTHER_BUTTON_SCAN_ARGS_EMAIL
+  export BROTHER_IMAGE_OUTPUT_FORMAT BROTHER_OCR_OUTPUT_FORMAT
+  export BROTHER_COPY_FILE_TO_TARGET BROTHER_COPY_EMAIL_TO_TARGET BROTHER_COPY_IMAGE_TO_TARGET BROTHER_COPY_OCR_TO_TARGET
   export BROTHER_TRIGGER_IMAGE_WEBHOOK_ID BROTHER_TRIGGER_OCR_WEBHOOK_ID
 
   if [[ ! -f "${CONFIG_PATH}" ]]; then
@@ -652,7 +661,14 @@ main() {
   copy_scans_to_mode="$(opt '.copy_scans_to_mode // "custom"')"
   copy_scans_to_custom="$(opt '.copy_scans_to // ""')"
   COPY_SCANS_TO="$(resolve_copy_scans_to "$copy_scans_to_mode" "$copy_scans_to_custom")"
+  BROTHER_BUTTON_DEFAULT_RESOLUTION="$(opt '.brother_button_default_resolution // 300')"
   BROTHER_BUTTON_SCAN_FORMAT="$(opt '.brother_button_scan_format // "jpeg"')"
+  BROTHER_IMAGE_OUTPUT_FORMAT="$(opt '.brother_image_output_format // "jpg"')"
+  BROTHER_OCR_OUTPUT_FORMAT="$(opt '.brother_ocr_output_format // "pdf"')"
+  BROTHER_COPY_FILE_TO_TARGET="$(opt '.brother_copy_file_to_target // true')"
+  BROTHER_COPY_EMAIL_TO_TARGET="$(opt '.brother_copy_email_to_target // true')"
+  BROTHER_COPY_IMAGE_TO_TARGET="$(opt '.brother_copy_image_to_target // false')"
+  BROTHER_COPY_OCR_TO_TARGET="$(opt '.brother_copy_ocr_to_target // false')"
   BROTHER_BUTTON_SCAN_ARGS_FILE="$(opt '.brother_button_scan_args_file // ""')"
   BROTHER_BUTTON_SCAN_ARGS_EMAIL="$(opt '.brother_button_scan_args_email // ""')"
   BROTHER_TRIGGER_IMAGE_WEBHOOK_ID="$(opt '.brother_trigger_image_webhook_id // ""')"

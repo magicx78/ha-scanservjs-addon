@@ -89,6 +89,13 @@ brother_scanner_model: "MFC-L2700DW"
 brother_scanner_ip: "192.168.1.50"
 brother_scanner_nodename: ""
 brother_overwrite_existing: false
+brother_button_default_resolution: 300
+brother_image_output_format: "jpg"
+brother_ocr_output_format: "pdf"
+brother_copy_file_to_target: true
+brother_copy_email_to_target: true
+brother_copy_image_to_target: false
+brother_copy_ocr_to_target: false
 ```
 
 ### Option reference
@@ -112,6 +119,13 @@ brother_overwrite_existing: false
 - `brother_scanner_ip`: scanner IP for network registration
 - `brother_scanner_nodename`: optional nodename instead of IP
 - `brother_overwrite_existing`: removes existing Brother registration before adding a new one
+- `brother_button_default_resolution`: default Brother frontpanel DPI fallback, recommended `300` for OCR
+- `brother_image_output_format`: output format for Brother `Scan to Image` (`native`, `jpg`, `pdf`, `tiff`)
+- `brother_ocr_output_format`: output format for Brother `Scan to OCR` (`native`, `jpg`, `pdf`, `tiff`)
+- `brother_copy_file_to_target`: copy `Scan to File` result to `copy_scans_to`
+- `brother_copy_email_to_target`: copy `Scan to Email` result to `copy_scans_to`
+- `brother_copy_image_to_target`: copy `Scan to Image` result to `copy_scans_to`
+- `brother_copy_ocr_to_target`: copy `Scan to OCR` result to `copy_scans_to`
 
 ### Paperless format recommendation
 
@@ -120,6 +134,14 @@ For `paperless-ngx`, this setup works well in practice:
 - standard documents: `PDF (JPG | @:pipeline.medium-quality)` with `300 dpi`
 - mostly text: grayscale at `300 dpi` (or black/white for very small files)
 - photos or color-heavy pages: color scans only when needed
+
+Recommended Brother frontpanel settings for OCR-heavy workflows:
+
+- `brother_button_default_resolution: 300` (usually the best quality/size tradeoff; use `600` only for very small print)
+- `brother_image_output_format: "jpg"`
+- `brother_ocr_output_format: "pdf"`
+- `brother_copy_file_to_target: true` (File button goes to Paperless target)
+- `brother_copy_image_to_target: false` and `brother_copy_ocr_to_target: false` (Image/OCR remain in add-on `/data/output`)
 
 Brother frontpanel scans in this add-on currently use `skey-scanimage` and produce `TIFF` files. `paperless-ngx` can ingest them reliably, but they are usually larger than medium-quality PDF/JPG pipelines.
 When `copy_scans_to` points to `/share/paperless...`, Brother button `TIFF` files are automatically converted to `JPG` before copying to improve Paperless ingest compatibility.

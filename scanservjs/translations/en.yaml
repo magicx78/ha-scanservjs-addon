@@ -56,9 +56,30 @@ configuration:
   brother_overwrite_existing:
     name: Overwrite Brother registration
     description: Removes an existing Brother entry before re-registering it.
+  brother_button_default_resolution:
+    name: Brother default resolution (DPI)
+    description: Default DPI for Brother button scans when no profile resolution is set. 300 is usually best for OCR.
   brother_button_scan_format:
     name: Brother button scan format
     description: Output format used by Brother Scan to File and Scan to Email button actions, for example jpeg or png. For paperless setups, 300dpi and compact formats are usually best.
+  brother_image_output_format:
+    name: Brother image output format
+    description: Output format for Brother Scan to Image (native, jpg, pdf, tiff).
+  brother_ocr_output_format:
+    name: Brother OCR output format
+    description: Output format for Brother Scan to OCR (native, jpg, pdf, tiff).
+  brother_copy_file_to_target:
+    name: Copy file to target
+    description: Copy Brother Scan to File output to copy_scans_to.
+  brother_copy_email_to_target:
+    name: Copy email to target
+    description: Copy Brother Scan to Email output to copy_scans_to.
+  brother_copy_image_to_target:
+    name: Copy image to target
+    description: Copy Brother Scan to Image output to copy_scans_to.
+  brother_copy_ocr_to_target:
+    name: Copy OCR to target
+    description: Copy Brother Scan to OCR output to copy_scans_to.
   brother_button_scan_args_file:
     name: Brother file button scan args
     description: Optional extra scanimage arguments for the Brother Scan to File button, separated by spaces.
