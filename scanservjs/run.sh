@@ -3,6 +3,7 @@ set -euo pipefail
 
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
+APP_DIR="${APP_DIR:-/app}"
 
 log() {
   bashio::log.info "$*"
@@ -262,6 +263,12 @@ main() {
     log "Brother Support deaktiviert"
   fi
 
+  if [[ ! -f "${APP_DIR}/server/server.js" ]]; then
+    err "scanservjs Einstiegspunkt fehlt: ${APP_DIR}/server/server.js"
+    return 1
+  fi
+
+  cd "${APP_DIR}"
   log "Starte scanservjs"
   exec node ./server/server.js
 }
