@@ -20,6 +20,52 @@ button_output_dir() {
   printf '/data/output\n'
 }
 
+button_profile_config_path() {
+  local profile="$1"
+  local config_name=""
+
+  case "$profile" in
+    file)
+      config_name="scantofile.config"
+      ;;
+    email)
+      config_name="scantoemail.config"
+      ;;
+    image)
+      config_name="scantoimage.config"
+      ;;
+    ocr)
+      config_name="scantoocr.config"
+      ;;
+  esac
+
+  [[ -n "${config_name}" ]] || return 1
+
+  if [[ -f "/etc/opt/brother/scanner/brscan-skey/${config_name}" ]]; then
+    printf "/etc/opt/brother/scanner/brscan-skey/%s\n" "${config_name}"
+    return 0
+  fi
+
+  if [[ -f "/opt/brother/scanner/brscan-skey/${config_name}" ]]; then
+    printf "/opt/brother/scanner/brscan-skey/%s\n" "${config_name}"
+    return 0
+  fi
+
+  return 1
+}
+
+load_button_profile_config() {
+  local profile="$1"
+  local config_path=""
+
+  if ! config_path="$(button_profile_config_path "${profile}")"; then
+    return 0
+  fi
+
+  # shellcheck disable=SC1090
+  source "${config_path}"
+}
+
 normalize_scan_format() {
   case "$1" in
     jpg)
@@ -79,6 +125,35 @@ append_scan_args() {
   [[ "${#parsed[@]}" -gt 0 ]] && args_ref+=("${parsed[@]}")
 }
 
+append_skey_args() {
+  local profile="$1"
+  local -n args_ref="$2"
+
+  load_button_profile_config "${profile}"
+
+  if [[ -n "${resolution:-}" ]]; then
+    args_ref+=("--resolution" "${resolution}")
+  else
+    args_ref+=("--resolution" "100")
+  fi
+
+  if [[ -n "${source:-}" ]]; then
+    args_ref+=("--source" "${source}")
+  else
+    args_ref+=("--source" "FB")
+  fi
+
+  if [[ -n "${size:-}" ]]; then
+    args_ref+=("--size" "${size}")
+  else
+    args_ref+=("--size" "A4")
+  fi
+
+  if [[ "${duplex:-OFF}" == "ON" ]]; then
+    args_ref+=("--duplex")
+  fi
+}
+
 copy_scan_output() {
   local output_file="$1"
 
@@ -97,6 +172,7 @@ scan_via_profile() {
   local requested_device="${2:-}"
   local friendly_name="${3:-}"
   local device format ext output_dir output_file
+  local skey_bin=""
   local -a scan_args=()
 
   load_button_env
@@ -110,25 +186,39 @@ scan_via_profile() {
     exit 1
   fi
 
-  format="$(normalize_scan_format "${BROTHER_BUTTON_SCAN_FORMAT:-jpeg}")"
-  ext="$(scan_extension "${format}")"
-  output_file="${output_dir}/button_${profile}_$(button_timestamp).${ext}"
+  if [[ -x "/opt/brother/scanner/brscan-skey/skey-scanimage" ]]; then
+    skey_bin="/opt/brother/scanner/brscan-skey/skey-scanimage"
+    format="tiff"
+    ext="tif"
+    output_file="${output_dir}/button_${profile}_$(button_timestamp).${ext}"
+    scan_args=(--device-name "${device}" --outputfile "${output_file}")
+    append_skey_args "${profile}" scan_args
+    echo "Brother button ${profile}: skey scan start device=${device} name=${friendly_name:-<unknown>} output=${output_file}"
+    if ! "${skey_bin}" "${scan_args[@]}"; then
+      rm -f "${output_file}"
+      echo "Brother button ${profile}: skey-scanimage failed" >&2
+      exit 1
+    fi
+  else
+    format="$(normalize_scan_format "${BROTHER_BUTTON_SCAN_FORMAT:-jpeg}")"
+    ext="$(scan_extension "${format}")"
+    output_file="${output_dir}/button_${profile}_$(button_timestamp).${ext}"
+    scan_args=(--device-name="${device}" --format="${format}")
+    case "${profile}" in
+      file)
+        append_scan_args "${BROTHER_BUTTON_SCAN_ARGS_FILE:-}" scan_args
+        ;;
+      email)
+        append_scan_args "${BROTHER_BUTTON_SCAN_ARGS_EMAIL:-}" scan_args
+        ;;
+    esac
 
-  scan_args=(--device-name="${device}" --format="${format}")
-  case "${profile}" in
-    file)
-      append_scan_args "${BROTHER_BUTTON_SCAN_ARGS_FILE:-}" scan_args
-      ;;
-    email)
-      append_scan_args "${BROTHER_BUTTON_SCAN_ARGS_EMAIL:-}" scan_args
-      ;;
-  esac
-
-  echo "Brother button ${profile}: scan start device=${device} name=${friendly_name:-<unknown>} output=${output_file}"
-  if ! scanimage "${scan_args[@]}" >"${output_file}"; then
-    rm -f "${output_file}"
-    echo "Brother button ${profile}: scanimage failed" >&2
-    exit 1
+    echo "Brother button ${profile}: generic scan start device=${device} name=${friendly_name:-<unknown>} output=${output_file}"
+    if ! scanimage "${scan_args[@]}" >"${output_file}"; then
+      rm -f "${output_file}"
+      echo "Brother button ${profile}: scanimage failed" >&2
+      exit 1
+    fi
   fi
 
   if [[ ! -s "${output_file}" ]]; then
