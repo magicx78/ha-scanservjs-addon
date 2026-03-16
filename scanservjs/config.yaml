@@ -2,7 +2,7 @@ name: "scanservjs Scan Server"
 version: "1.0.0"
 slug: "scanservjs"
 description: "scanservjs Web-UI fuer Scanner (SANE) - optional mit Brother brscan4 Auto-Install und MFC-L2700DW Netzwerk-Registrierung."
-url: "https://github.com/hoenas/ha-scanservjs-addon"
+url: "https://github.com/magicx78/ha-scanservjs-addon"
 
 arch:
   - amd64

@@ -2,6 +2,9 @@
 
 `scanservjs` provides a web UI for SANE-compatible scanners on Home Assistant OS. This repository packages scanservjs as a custom Home Assistant add-on for `amd64` systems and optionally supports Brother devices through `brscan4`.
 
+[![Add this repository to your Home Assistant instance](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fmagicx78%2Fha-scanservjs-addon)
+[![Open this add-on in your Home Assistant instance](https://my.home-assistant.io/badges/supervisor_addon.svg)](https://my.home-assistant.io/redirect/supervisor_addon/?addon=9ca70578_scanservjs&repository_url=https%3A%2F%2Fgithub.com%2Fmagicx78%2Fha-scanservjs-addon)
+
 ## Purpose
 
 This add-on targets a stable, maintainable `scanservjs` deployment for Home Assistant OS with:
@@ -18,16 +21,36 @@ This add-on targets a stable, maintainable `scanservjs` deployment for Home Assi
 
 ## Installation
 
-1. In Home Assistant, open `Settings` -> `Add-ons` -> `Add-on Store`.
-2. Open the repository menu and choose `Repositories`.
-3. Add the custom repository URL you want to consume.
+### Quick install
+
+1. Click `Add this repository to your Home Assistant instance`.
+2. Confirm the repository URL: `https://github.com/magicx78/ha-scanservjs-addon`
+3. Click `Open this add-on in your Home Assistant instance`.
 4. Install `scanservjs Scan Server`.
 5. Configure the add-on and start it.
 
+### Manual install
+
+1. In Home Assistant, open `Settings` -> `Add-ons` -> `Add-on Store`.
+2. Open the repository menu and choose `Repositories`.
+3. Add `https://github.com/magicx78/ha-scanservjs-addon`.
+4. Refresh the add-on store if needed.
+5. Open `scanservjs Scan Server`.
+6. Click `Install`, then configure and start the add-on.
+
 Repository URLs:
 
-- Upstream repository: [https://github.com/hoenas/ha-scanservjs-addon](https://github.com/hoenas/ha-scanservjs-addon)
-- Fork with release workflow: [https://github.com/magicx78/ha-scanservjs-addon](https://github.com/magicx78/ha-scanservjs-addon)
+- Release repository: [https://github.com/magicx78/ha-scanservjs-addon](https://github.com/magicx78/ha-scanservjs-addon)
+- Upstream base repository: [https://github.com/hoenas/ha-scanservjs-addon](https://github.com/hoenas/ha-scanservjs-addon)
+
+### Recommended first start
+
+Generic SANE mode is the recommended default:
+
+- install the add-on
+- leave `brother_enable: false` unless you explicitly need Brother proprietary tooling
+- start the add-on
+- verify detection through `/api/v1/context`
 
 ## Configuration
 
@@ -117,6 +140,8 @@ Variant B: optional Brother mode
 - choose `auto`, `url`, or `local` package source
 - verify registration with `brsaneconfig4 -q`
 
+Brother Web/API scanning is validated for `MFC-L2710DW` via `brother4:net1;dev0`. `brscan-skey` remains optional and is not required for generic scanning through the add-on UI or API.
+
 The container-level fallback remains available through `ENABLE_BROTHER_SUPPORT=false`, which forces generic SANE mode even if Brother options are set.
 
 ## Troubleshooting
@@ -144,7 +169,7 @@ Known limits:
 
 - `amd64` is the only release target at the moment
 - Brother `auto` download still depends on Brother-hosted metadata and package availability
-- full runtime validation on HAOS remains a manual test activity
+- `brscan-skey` may remain unavailable in some environments without blocking generic SANE scanning
 
 ## CI and Validation
 
