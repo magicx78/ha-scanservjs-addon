@@ -3,7 +3,7 @@ set -euo pipefail
 
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
-APP_DIR="${APP_DIR:-/app}"
+APP_DIR="${APP_DIR:-}"
 
 log() {
   bashio::log.info "$*"
@@ -20,6 +20,24 @@ err() {
 opt() {
   local query="$1"
   jq -r "${query}" "${CONFIG_PATH}"
+}
+
+detect_app_dir() {
+  local candidate
+
+  if [[ -n "${APP_DIR}" && -f "${APP_DIR}/server/server.js" ]]; then
+    printf "%s\n" "${APP_DIR}"
+    return 0
+  fi
+
+  for candidate in /usr/lib/scanservjs /app; do
+    if [[ -f "${candidate}/server/server.js" ]]; then
+      printf "%s\n" "${candidate}"
+      return 0
+    fi
+  done
+
+  return 1
 }
 
 ensure_airscan_config() {
@@ -263,12 +281,14 @@ main() {
     log "Brother Support deaktiviert"
   fi
 
-  if [[ ! -f "${APP_DIR}/server/server.js" ]]; then
-    err "scanservjs Einstiegspunkt fehlt: ${APP_DIR}/server/server.js"
+  local app_dir
+  if ! app_dir="$(detect_app_dir)"; then
+    err "scanservjs Einstiegspunkt fehlt. Gepruefte Pfade: /usr/lib/scanservjs/server/server.js, /app/server/server.js"
     return 1
   fi
 
-  cd "${APP_DIR}"
+  log "Nutze scanservjs App-Verzeichnis: ${app_dir}"
+  cd "${app_dir}"
   log "Starte scanservjs"
   exec node ./server/server.js
 }
