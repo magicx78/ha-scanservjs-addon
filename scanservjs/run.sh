@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r18"
+RUNTIME_REVISION="2026-03-16-r19"
 
 log() {
   bashio::log.info "$*"
@@ -546,8 +546,12 @@ start_brscan_skey() {
     log "brscan-skey gestartet"
   else
     log "brscan-skey Prozesspruefung uneindeutig; Frontpanel-Funktion kann trotzdem verfuegbar sein"
-    [[ -s /tmp/brscan-skey.log ]] && log "brscan-skey log: $(tail -n 20 /tmp/brscan-skey.log)"
+    if [[ -s /tmp/brscan-skey.log ]]; then
+      log "brscan-skey log: $(tail -n 20 /tmp/brscan-skey.log)"
+    fi
   fi
+
+  return 0
 }
 
 register_brother() {
