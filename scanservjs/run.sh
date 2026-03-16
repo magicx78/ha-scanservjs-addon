@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r20"
+RUNTIME_REVISION="2026-03-16-r21"
 
 log() {
   bashio::log.info "$*"
@@ -478,9 +478,9 @@ install_brscan4() {
   fi
 
   if [[ "$has_skey" != "true" ]]; then
-    if ! curl -fL --retry 3 --retry-delay 2 -o "$skey_deb" "$skey_url_legacy"; then
-      warn "Legacy brscan-skey URL fehlgeschlagen, versuche aktuelle URL"
-      curl -fL --retry 3 --retry-delay 2 -o "$skey_deb" "$skey_url_current"
+    if ! curl -fL --retry 3 --retry-delay 2 -o "$skey_deb" "$skey_url_current"; then
+      warn "Aktuelle brscan-skey URL fehlgeschlagen, versuche Legacy URL"
+      curl -fL --retry 3 --retry-delay 2 -o "$skey_deb" "$skey_url_legacy"
     fi
     dpkg -i "$skey_deb" || true
   fi
