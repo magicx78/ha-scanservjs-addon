@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r22"
+RUNTIME_REVISION="2026-03-16-r23"
 
 log() {
   bashio::log.info "$*"
