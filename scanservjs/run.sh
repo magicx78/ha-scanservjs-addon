@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r9"
+RUNTIME_REVISION="2026-03-16-r10"
 
 log() {
   bashio::log.info "$*"
@@ -67,6 +67,40 @@ sanitize_brother_scan_key_name() {
   fi
 
   printf "%.15s\n" "$sanitized"
+}
+
+resolve_brscan_skey_wrapper_bin() {
+  if command -v brscan-skey >/dev/null 2>&1; then
+    command -v brscan-skey
+    return 0
+  fi
+
+  if [[ -x /opt/brother/scanner/brscan-skey/brscan-skey ]]; then
+    printf "%s\n" "/opt/brother/scanner/brscan-skey/brscan-skey"
+    return 0
+  fi
+
+  return 1
+}
+
+resolve_brscan_skey_exec_bin() {
+  local wrapper_bin
+
+  if [[ -x /opt/brother/scanner/brscan-skey/brscan-skey-exe ]]; then
+    printf "%s\n" "/opt/brother/scanner/brscan-skey/brscan-skey-exe"
+    return 0
+  fi
+
+  if wrapper_bin="$(resolve_brscan_skey_wrapper_bin 2>/dev/null)"; then
+    local candidate
+    candidate="$(dirname "$wrapper_bin")/brscan-skey-exe"
+    if [[ -x "$candidate" ]]; then
+      printf "%s\n" "$candidate"
+      return 0
+    fi
+  fi
+
+  return 1
 }
 
 detect_app_dir() {
@@ -454,11 +488,14 @@ configure_brscan_skey_name() {
   local requested_name="$1"
   local display_name
   local output
+  local skey_exec_bin
 
-  command -v brscan-skey >/dev/null 2>&1 || return 0
+  if ! skey_exec_bin="$(resolve_brscan_skey_exec_bin 2>/dev/null)"; then
+    return 0
+  fi
 
   display_name="$(sanitize_brother_scan_key_name "$requested_name")"
-  if output="$(brscan-skey -u "$display_name" 2>&1)"; then
+  if output="$("$skey_exec_bin" -u "$display_name" 2>&1)"; then
     log "brscan-skey Zielname gesetzt: ${display_name}"
     [[ -n "$output" ]] && log "brscan-skey -u: ${output}"
   else
@@ -469,10 +506,11 @@ configure_brscan_skey_name() {
 start_brscan_skey() {
   local skey_bin=""
   local skey_proc="brscan-skey-exe"
-  if command -v brscan-skey >/dev/null 2>&1; then
-    skey_bin="$(command -v brscan-skey)"
-  elif [[ -x /opt/brother/scanner/brscan-skey/brscan-skey ]]; then
-    skey_bin="/opt/brother/scanner/brscan-skey/brscan-skey"
+  local skey_diag_bin=""
+  if skey_bin="$(resolve_brscan_skey_exec_bin 2>/dev/null)"; then
+    skey_diag_bin="$skey_bin"
+  elif skey_bin="$(resolve_brscan_skey_wrapper_bin 2>/dev/null)"; then
+    skey_diag_bin="$skey_bin"
   else
     warn "brscan-skey Binary nicht gefunden."
     return 0
@@ -491,7 +529,7 @@ start_brscan_skey() {
   else
     warn "brscan-skey konnte nicht gestartet werden"
     [[ -f /tmp/brscan-skey.log ]] && warn "brscan-skey log: $(tail -n 20 /tmp/brscan-skey.log)"
-    log_cmd_output "brscan-skey --diagnosis" brscan-skey --diagnosis
+    log_cmd_output "brscan-skey --diagnosis" "$skey_diag_bin" --diagnosis
   fi
 }
 
