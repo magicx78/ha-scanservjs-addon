@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r15"
+RUNTIME_REVISION="2026-03-16-r18"
 
 log() {
   bashio::log.info "$*"
@@ -25,6 +25,37 @@ log_cmd_output() {
 
   if output="$("$@" 2>&1)"; then
     log "${label}: ${output:-<leer>}"
+  else
+    warn "${label} fehlgeschlagen: ${output:-<leer>}"
+  fi
+}
+
+run_with_timeout() {
+  local seconds="$1"
+  shift
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout --foreground "${seconds}" "$@"
+  else
+    "$@"
+  fi
+}
+
+log_cmd_output_timeout() {
+  local label="$1"
+  local seconds="$2"
+  shift 2
+  local output=""
+  local status=0
+
+  if output="$(run_with_timeout "$seconds" "$@" 2>&1)"; then
+    log "${label}: ${output:-<leer>}"
+    return 0
+  fi
+
+  status=$?
+  if [[ "$status" -eq 124 ]]; then
+    warn "${label} Timeout nach ${seconds}s: ${output:-<leer>}"
   else
     warn "${label} fehlgeschlagen: ${output:-<leer>}"
   fi
@@ -174,7 +205,7 @@ warmup_brother_device() {
   command -v scanimage >/dev/null 2>&1 || return 0
 
   while (( attempts < 2 )); do
-    if scanimage -A -d "$device" >/tmp/brother-device-warmup.log 2>&1; then
+    if run_with_timeout 12 scanimage -A -d "$device" >/tmp/brother-device-warmup.log 2>&1; then
       log "Brother Device-Warmup erfolgreich: ${device}"
       return 0
     fi
@@ -200,8 +231,8 @@ configure_scanimage_discovery() {
 
 discover_brother_device_ids() {
   {
-    command -v brscan-skey >/dev/null 2>&1 && brscan-skey -l 2>/dev/null || true
-    command -v brsaneconfig4 >/dev/null 2>&1 && brsaneconfig4 -q 2>/dev/null || true
+    command -v brscan-skey >/dev/null 2>&1 && run_with_timeout 5 brscan-skey -l 2>/dev/null || true
+    command -v brsaneconfig4 >/dev/null 2>&1 && run_with_timeout 5 brsaneconfig4 -q 2>/dev/null || true
   } | grep -Eo 'brother[0-9]+:net[0-9]+;dev[0-9]+' | awk '!seen[$0]++' || true
 }
 
@@ -214,7 +245,7 @@ probe_brother_device_ids() {
   for net_idx in 1 2 3 4; do
     for dev_idx in 0 1; do
       candidate="brother4:net${net_idx};dev${dev_idx}"
-      if output="$(scanimage -A -d "$candidate" 2>&1)" && grep -Fq "All options specific to device" <<<"$output"; then
+      if output="$(run_with_timeout 8 scanimage -A -d "$candidate" 2>&1)" && grep -Fq "All options specific to device" <<<"$output"; then
         printf "%s\n" "$candidate"
       fi
     done
@@ -311,6 +342,8 @@ write_brother_button_env() {
   } > "$env_file"
 
   chmod 600 "$env_file"
+  BROTHER_DEFAULT_DEVICE_RESOLVED="${default_device}"
+  export BROTHER_DEFAULT_DEVICE_RESOLVED
   log "Brother Button-Umgebung geschrieben: ${env_file}"
 }
 
@@ -656,36 +689,28 @@ main() {
     fi
     install_brother_button_scripts
     write_brother_button_env "$bname"
-    start_brscan_skey
 
-    if [[ -z "$DEVICES" || "$DEVICES" == "null" ]]; then
-      local brother_devices
-      brother_devices="$(discover_brother_device_ids | join_delim_lines || true)"
-      if [[ -z "$brother_devices" ]]; then
-        brother_devices="$(probe_brother_device_ids | join_delim_lines || true)"
-      fi
-      if [[ -n "$brother_devices" ]]; then
-        DEVICES="$brother_devices"
-        export DEVICES
-        log "Brother Device-Fallback fuer scanservjs gesetzt: ${DEVICES}"
-      else
-        warn "Brother Device-Fallback lieferte keine Device-ID."
-      fi
-    fi
+    start_brscan_skey
   else
     log "Brother Support deaktiviert"
   fi
 
+  local primary_brother_device=""
+  if [[ "$benable" == "true" ]]; then
+    primary_brother_device="$(first_device_item "${DEVICES:-}")"
+    if [[ -z "$primary_brother_device" && -n "${BROTHER_DEFAULT_DEVICE_RESOLVED:-}" ]]; then
+      primary_brother_device="${BROTHER_DEFAULT_DEVICE_RESOLVED}"
+    fi
+    warmup_brother_device "$primary_brother_device"
+  fi
+
   if command -v brsaneconfig4 >/dev/null 2>&1; then
-    log_cmd_output "brsaneconfig4 -q" brsaneconfig4 -q
+    log_cmd_output_timeout "brsaneconfig4 -q" 5 brsaneconfig4 -q
   fi
   if command -v brscan-skey >/dev/null 2>&1; then
-    log_cmd_output "brscan-skey -l" brscan-skey -l
+    log_cmd_output_timeout "brscan-skey -l" 5 brscan-skey -l
   fi
-  log_cmd_output "scanimage -L" scanimage -L
-  if [[ "$benable" == "true" ]]; then
-    warmup_brother_device "$(first_device_item "${DEVICES:-}")"
-  fi
+  log_cmd_output_timeout "scanimage -L" 10 scanimage -L
 
   local app_dir
   if ! app_dir="$(detect_app_dir)"; then
