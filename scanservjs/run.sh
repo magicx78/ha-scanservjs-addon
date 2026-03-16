@@ -58,6 +58,16 @@ ensure_airscan_config() {
   grep -Fqx "[devices]" "$file" || printf "[devices]\n" >> "$file"
 }
 
+ensure_generic_airscan_fallbacks() {
+  local ip="$1"
+
+  [[ -n "$ip" && "$ip" != "null" ]] || return 0
+
+  ensure_airscan_config
+  ensure_line "Generic eSCL = http://${ip}/eSCL, eSCL" "/etc/sane.d/airscan.conf"
+  ensure_line "Generic WSD = http://${ip}/WebServices/ScannerService, WSD" "/etc/sane.d/airscan.conf"
+}
+
 split_delim_lines() {
   printf "%s" "$1" | tr "${DELIMITER}" '\n' | sed '/^[[:space:]]*$/d'
 }
@@ -247,6 +257,8 @@ main() {
   DEVICES="$(opt '.devices // ""')"
   OCR_LANG="$(opt '.ocr_lang // "eng"')"
   COPY_SCANS_TO="$(opt '.copy_scans_to // ""')"
+  local fallback_scanner_ip
+  fallback_scanner_ip="$(opt '.brother_scanner_ip // ""')"
 
   ensure_line "airscan" "/etc/sane.d/dll.conf"
 
@@ -266,6 +278,8 @@ main() {
     while IFS= read -r devline; do
       grep -Fqx "$devline" /etc/sane.d/airscan.conf 2>/dev/null || sed -i "/^\[devices\]/a $devline" /etc/sane.d/airscan.conf
     done < <(split_delim_lines "$AIRSCAN_DEVICES")
+  else
+    ensure_generic_airscan_fallbacks "$fallback_scanner_ip"
   fi
 
   local benable

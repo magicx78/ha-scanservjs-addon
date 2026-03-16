@@ -1,6 +1,6 @@
 # HAOS Smoke Test - ha-scanservjs-addon v1.0.0
 
-Status: OPEN
+Status: NO-GO
 Release gate: Required before tagging `v1.0.0`
 
 ## Practical step sequence
@@ -19,31 +19,34 @@ Release gate: Required before tagging `v1.0.0`
 
 ## Test record
 
-Date:
+Date: 2026-03-16
 HAOS version:
 Supervisor version:
-Architecture:
+Architecture: amd64
 
 ### Required checks
 
-- Repository added: PASS / FAIL
-- Add-on installed: PASS / FAIL
-- Start without Brother support: PASS / FAIL
-- Ingress / Web UI reachable: PASS / FAIL
-- `scanimage -L` detects scanner: PASS / FAIL
-- Test scan successful: PASS / FAIL
-- OCR successful: PASS / FAIL
+- Repository added: PASS
+- Add-on installed: PASS
+- Start without Brother support: PASS
+- Ingress / Web UI reachable: PASS
+- `scanimage -L` detects scanner: FAIL
+- Test scan successful: FAIL
+- OCR successful: FAIL
 
 ### Optional checks
 
-- Brother support enabled: PASS / FAIL / N/A
-- Real Brother device tested: PASS / FAIL / N/A
-- Fallback without Brother re-verified: PASS / FAIL / N/A
+- Brother support enabled: PASS
+- Real Brother device tested: PASS
+- Fallback without Brother re-verified: PASS
 
 ### Overall result
 
-- Go / No-Go:
+- Go / No-Go: No-Go
 
 ### Notes
 
-- 
+- Add-on starts under HAOS and the Web UI is reachable.
+- Generic SANE/AirScan detection did not expose a scanner in scanservjs.
+- Optional Brother runtime installed and registered brscan4 successfully, but no scan device was returned to the UI.
+- Release remains blocked until a scanner is detected and a real test scan succeeds.
