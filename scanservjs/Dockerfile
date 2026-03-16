@@ -9,7 +9,7 @@ ENV ENABLE_BROTHER_SUPPORT=true
 ARG BASHIO_VERSION=v0.16.2
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends jq curl ca-certificates libusb-0.1-4 sane-airscan \
+    && apt-get install -y --no-install-recommends jq curl ca-certificates libusb-0.1-4 sane-airscan iproute2 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

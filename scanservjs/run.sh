@@ -4,6 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
+RUNTIME_REVISION="2026-03-16-r3"
 
 log() {
   bashio::log.info "$*"
@@ -32,6 +33,16 @@ log_cmd_output() {
 opt() {
   local query="$1"
   jq -r "${query}" "${CONFIG_PATH}"
+}
+
+route_interface_for_ip() {
+  local ip="$1"
+  ip route get "$ip" 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="dev") {print $(i+1); exit}}'
+}
+
+route_source_for_ip() {
+  local ip="$1"
+  ip route get "$ip" 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="src") {print $(i+1); exit}}'
 }
 
 detect_app_dir() {
@@ -143,14 +154,23 @@ install_brscan4() {
   local deb="/tmp/brscan4.amd64.deb"
   local skey_deb="/tmp/brscan-skey.amd64.deb"
   local skey_url="https://download.brother.com/pub/com/linux/linux/packages/brscan-skey-0.3.2-0.amd64.deb"
+  local has_brscan4="false"
+  local has_skey="false"
+
+  if dpkg -s brscan4 >/dev/null 2>&1 || command -v brsaneconfig4 >/dev/null 2>&1; then
+    has_brscan4="true"
+  fi
+  if dpkg -s brscan-skey >/dev/null 2>&1 || command -v brscan-skey >/dev/null 2>&1; then
+    has_skey="true"
+  fi
 
   if [[ "$accept" != "true" ]]; then
     warn "brother_enable=true, aber brother_accept_eula=false - Treiberinstallation uebersprungen."
     return 0
   fi
 
-  if dpkg -s brscan4 >/dev/null 2>&1 || command -v brsaneconfig4 >/dev/null 2>&1; then
-    log "brscan4 scheint bereits installiert - skip."
+  if [[ "$has_brscan4" == "true" && "$has_skey" == "true" ]]; then
+    log "brscan4 und brscan-skey scheinen bereits installiert - skip."
     ensure_line "brother4" "/etc/sane.d/dll.conf"
     return 0
   fi
@@ -164,43 +184,98 @@ install_brscan4() {
   apt-get update
   apt-get install -y --no-install-recommends curl ca-certificates
 
-  if [[ "$source" == "local" ]]; then
-    if [[ -z "$local_path" || "$local_path" == "null" || ! -f "$local_path" ]]; then
-      err "Lokale .deb Datei fehlt: ${local_path}"
-      return 1
+  if [[ "$has_brscan4" != "true" ]]; then
+    if [[ "$source" == "local" ]]; then
+      if [[ -z "$local_path" || "$local_path" == "null" || ! -f "$local_path" ]]; then
+        err "Lokale .deb Datei fehlt: ${local_path}"
+        return 1
+      fi
+      cp -f "$local_path" "$deb"
+    elif [[ "$source" == "url" ]]; then
+      if [[ -z "$url" || "$url" == "null" ]]; then
+        err "brother_driver_source=url, aber brother_driver_url ist leer."
+        return 1
+      fi
+      curl -fL --retry 3 --retry-delay 2 -o "$deb" "$url"
+    else
+      local lnk debname
+      lnk="$(curl -fsSL "https://download.brother.com/pub/com/linux/linux/infs/brscan4.lnk")"
+      debname="$(printf "%s" "$lnk" | tr ' ' '\n' | grep '^DEB64=' | cut -d= -f2)"
+      if [[ -z "$debname" ]]; then
+        err "Konnte DEB64 aus brscan4.lnk nicht parsen."
+        return 1
+      fi
+      curl -fL --retry 3 --retry-delay 2 -o "$deb" "https://download.brother.com/pub/com/linux/linux/packages/${debname}"
     fi
-    cp -f "$local_path" "$deb"
-  elif [[ "$source" == "url" ]]; then
-    if [[ -z "$url" || "$url" == "null" ]]; then
-      err "brother_driver_source=url, aber brother_driver_url ist leer."
-      return 1
+
+    if [[ -n "$sha" && "$sha" != "null" ]]; then
+      log "Pruefe SHA256 fuer brscan4 Paket"
+      echo "${sha}  ${deb}" | sha256sum -c -
     fi
-    curl -fL --retry 3 --retry-delay 2 -o "$deb" "$url"
+
+    dpkg -i "$deb" || true
   else
-    local lnk debname
-    lnk="$(curl -fsSL "https://download.brother.com/pub/com/linux/linux/infs/brscan4.lnk")"
-    debname="$(printf "%s" "$lnk" | tr ' ' '\n' | grep '^DEB64=' | cut -d= -f2)"
-    if [[ -z "$debname" ]]; then
-      err "Konnte DEB64 aus brscan4.lnk nicht parsen."
-      return 1
-    fi
-    curl -fL --retry 3 --retry-delay 2 -o "$deb" "https://download.brother.com/pub/com/linux/linux/packages/${debname}"
+    log "brscan4 bereits vorhanden - nur brscan-skey Pruefung."
   fi
 
-  if [[ -n "$sha" && "$sha" != "null" ]]; then
-    log "Pruefe SHA256 fuer brscan4 Paket"
-    echo "${sha}  ${deb}" | sha256sum -c -
+  if [[ "$has_skey" != "true" ]]; then
+    curl -fL --retry 3 --retry-delay 2 -o "$skey_deb" "$skey_url"
+    dpkg -i "$skey_deb" || true
   fi
 
-  dpkg -i "$deb" || true
-  curl -fL --retry 3 --retry-delay 2 -o "$skey_deb" "$skey_url"
-  dpkg -i "$skey_deb" || true
   apt-get -y -f install
   apt-get clean
   rm -rf /var/lib/apt/lists/*
   rm -f "$deb"
   rm -f "$skey_deb"
   ensure_line "brother4" "/etc/sane.d/dll.conf"
+}
+
+configure_brscan_skey() {
+  local target_ip="$1"
+  local config="/opt/brother/scanner/brscan-skey/brscan-skey.config"
+  local iface source_ip
+
+  command -v brscan-skey >/dev/null 2>&1 || return 0
+  [[ -f "$config" ]] || {
+    warn "brscan-skey Konfiguration nicht gefunden: ${config}"
+    return 0
+  }
+
+  iface="$(route_interface_for_ip "$target_ip")"
+  source_ip="$(route_source_for_ip "$target_ip")"
+
+  if [[ -z "$iface" ]]; then
+    warn "Konnte Netzwerk-Interface fuer ${target_ip} nicht ermitteln."
+  fi
+  if [[ -z "$source_ip" ]]; then
+    warn "Konnte Quell-IP fuer ${target_ip} nicht ermitteln."
+  fi
+
+  sed -i '/^eth=/d;/^ip_address=/d' "$config"
+  [[ -n "$iface" ]] && printf "eth=%s\n" "$iface" >> "$config"
+  [[ -n "$source_ip" ]] && printf "ip_address=%s\n" "$source_ip" >> "$config"
+
+  log "brscan-skey config: eth=${iface:-<leer>} ip_address=${source_ip:-<leer>}"
+}
+
+start_brscan_skey() {
+  command -v brscan-skey >/dev/null 2>&1 || return 0
+
+  if pgrep -x brscan-skey >/dev/null 2>&1; then
+    log "brscan-skey laeuft bereits"
+    return 0
+  fi
+
+  brscan-skey >/tmp/brscan-skey.log 2>&1 &
+  sleep 1
+
+  if pgrep -x brscan-skey >/dev/null 2>&1; then
+    log "brscan-skey gestartet"
+  else
+    warn "brscan-skey konnte nicht gestartet werden"
+    [[ -f /tmp/brscan-skey.log ]] && warn "brscan-skey log: $(tail -n 20 /tmp/brscan-skey.log)"
+  fi
 }
 
 register_brother() {
@@ -256,6 +331,8 @@ main() {
     return 1
   fi
 
+  log "Runtime-Revision: ${RUNTIME_REVISION}"
+
   SANED_NET_HOSTS="$(opt '.saned_net_hosts // ""')"
   AIRSCAN_DEVICES="$(opt '.airscan_devices // ""')"
   SCANIMAGE_LIST_IGNORE="$(opt '.scanimage_list_ignore // false')"
@@ -310,6 +387,10 @@ main() {
 
     install_brscan4 "$baccept" "$bsrc" "$burl" "$bsha" "$blocal"
     register_brother "$doreg" "$bname" "$bmodel" "$bip" "$bnode" "$bow"
+    if [[ -n "$bip" && "$bip" != "null" ]]; then
+      configure_brscan_skey "$bip"
+    fi
+    start_brscan_skey
   else
     log "Brother Support deaktiviert"
   fi
