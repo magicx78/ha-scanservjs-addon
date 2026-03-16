@@ -120,22 +120,39 @@ brother_cfg_file() {
 }
 
 ensure_brother_sane_links() {
-  local src_dir="/usr/lib64/sane"
-  local dst_dir="/usr/lib/x86_64-linux-gnu/sane"
+  local src_dirs=("/usr/lib64/sane" "/opt/brother/scanner/brscan4")
+  local dst_dirs=("/usr/lib/x86_64-linux-gnu/sane" "/usr/lib64/sane")
+  local src_dir dst_dir
   local linked="false"
 
-  [[ -d "$src_dir" && -d "$dst_dir" ]] || return 0
-
-  shopt -s nullglob
-  for lib in "$src_dir"/libsane-brother*.so*; do
-    ln -sf "$lib" "$dst_dir/$(basename "$lib")"
-    linked="true"
+  for src_dir in "${src_dirs[@]}"; do
+    [[ -d "$src_dir" ]] || continue
+    for dst_dir in "${dst_dirs[@]}"; do
+      [[ -d "$dst_dir" ]] || continue
+      shopt -s nullglob
+      for lib in "$src_dir"/libsane-brother*.so*; do
+        ln -sf "$lib" "$dst_dir/$(basename "$lib")"
+        linked="true"
+      done
+      shopt -u nullglob
+    done
   done
-  shopt -u nullglob
 
   if [[ "$linked" == "true" ]]; then
-    log "Brother libsane Links nach ${dst_dir} aktualisiert"
+    log "Brother libsane Links aktualisiert"
   fi
+}
+
+setup_brother_library_paths() {
+  local base="${LD_LIBRARY_PATH:-}"
+  local extras="/opt/brother/scanner/brscan4:/usr/lib64:/usr/lib64/sane:/usr/lib/x86_64-linux-gnu/sane"
+
+  if [[ -n "$base" ]]; then
+    export LD_LIBRARY_PATH="${extras}:${base}"
+  else
+    export LD_LIBRARY_PATH="${extras}"
+  fi
+  log "LD_LIBRARY_PATH fuer Brother gesetzt"
 }
 
 brother_is_registered() {
@@ -437,6 +454,7 @@ main() {
 
     install_brscan4 "$baccept" "$bsrc" "$burl" "$bsha" "$blocal"
     ensure_brother_sane_links
+    setup_brother_library_paths
     register_brother "$doreg" "$bname" "$bmodel" "$bip" "$bnode" "$bow"
     if [[ -n "$bip" && "$bip" != "null" ]]; then
       configure_brscan_skey "$bip"
