@@ -1,0 +1,55 @@
+configuration:
+  saned_net_hosts:
+    name: SANE-Netzwerk-Hosts
+    description: Per Semikolon getrennte Hosts, die an /etc/sane.d/net.conf angehaengt werden.
+  airscan_devices:
+    name: Airscan-Geraete
+    description: Per Semikolon getrennte Eintraege fuer /etc/sane.d/airscan.conf.
+  scanimage_list_ignore:
+    name: scanimage-Liste ignorieren
+    description: Aktiviert bei Bedarf die scanimage-Umgebungsoption zum Ignorieren der Geraeteliste.
+  devices:
+    name: Geraetefilter
+    description: Optionaler Scanner-Filter, der an scanservjs weitergereicht wird.
+  ocr_lang:
+    name: OCR-Sprachen
+    description: Tesseract-OCR-Sprachen, zum Beispiel deu+eng.
+  copy_scans_to:
+    name: Scans kopieren nach
+    description: Verzeichnis, in das fertige Scans kopiert werden.
+  brother_enable:
+    name: Brother-Unterstuetzung aktivieren
+    description: Aktiviert die optionale Brother-brscan4-Logik.
+  brother_accept_eula:
+    name: Brother-EULA akzeptieren
+    description: Muss aktiviert sein, bevor proprietaere Brother-Treiber heruntergeladen oder installiert werden.
+  brother_driver_source:
+    name: Brother-Treiberquelle
+    description: Waehlt automatische Aufloesung, eine URL oder eine lokale Datei.
+  brother_driver_url:
+    name: Brother-Treiber-URL
+    description: Direkte URL zu einem Brother-brscan4-Debian-Paket.
+  brother_driver_sha256:
+    name: Brother-Treiber-SHA256
+    description: Optionaler SHA256-Pruefwert fuer das heruntergeladene Paket.
+  brother_driver_local_path:
+    name: Brother-Treiber lokaler Pfad
+    description: Lokaler Pfad zu einem Brother-brscan4-Debian-Paket, zum Beispiel unter /share.
+  brother_register_scanner:
+    name: Brother-Scanner registrieren
+    description: Fuehrt beim Start die brsaneconfig4-Registrierung aus.
+  brother_scanner_name:
+    name: Brother-Scannername
+    description: Registrierungsname fuer den Brother-Scanner.
+  brother_scanner_model:
+    name: Brother-Scannermodell
+    description: Brother-Modellbezeichnung fuer brsaneconfig4.
+  brother_scanner_ip:
+    name: Brother-Scanner-IP
+    description: IP-Adresse fuer die Brother-Netzwerkregistrierung.
+  brother_scanner_nodename:
+    name: Brother-Scanner-Nodename
+    description: Optionaler Nodename anstelle einer IP-Adresse.
+  brother_overwrite_existing:
+    name: Vorhandene Brother-Registrierung ueberschreiben
+    description: Entfernt einen vorhandenen Brother-Eintrag vor der Neuregistrierung.

@@ -21,6 +21,12 @@ opt() {
   jq -r "${query}" "${CONFIG_PATH}"
 }
 
+ensure_airscan_config() {
+  local file="/etc/sane.d/airscan.conf"
+  touch "$file"
+  grep -Fqx "[devices]" "$file" || printf "[devices]\n" >> "$file"
+}
+
 split_delim_lines() {
   printf "%s" "$1" | tr "${DELIMITER}" '\n' | sed '/^[[:space:]]*$/d'
 }
@@ -199,6 +205,11 @@ register_brother() {
 main() {
   export SANED_NET_HOSTS AIRSCAN_DEVICES SCANIMAGE_LIST_IGNORE DEVICES OCR_LANG COPY_SCANS_TO
 
+  if [[ ! -f "${CONFIG_PATH}" ]]; then
+    err "Addon-Konfiguration fehlt: ${CONFIG_PATH}"
+    return 1
+  fi
+
   SANED_NET_HOSTS="$(opt '.saned_net_hosts // ""')"
   AIRSCAN_DEVICES="$(opt '.airscan_devices // ""')"
   SCANIMAGE_LIST_IGNORE="$(opt '.scanimage_list_ignore // false')"
@@ -218,6 +229,7 @@ main() {
   fi
 
   if [[ -n "$AIRSCAN_DEVICES" && "$AIRSCAN_DEVICES" != "null" ]]; then
+    ensure_airscan_config
     while IFS= read -r devline; do
       grep -Fqx "$devline" /etc/sane.d/airscan.conf 2>/dev/null || sed -i "/^\[devices\]/a $devline" /etc/sane.d/airscan.conf
     done < <(split_delim_lines "$AIRSCAN_DEVICES")

@@ -1,0 +1,49 @@
+name: Release
+
+'on':
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify version matches tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          version_file="$(tr -d '\r\n' < VERSION)"
+          addon_version="$(sed -n 's/^version: "\(.*\)"$/\1/p' scanservjs/config.yaml)"
+          test "${tag}" = "${version_file}"
+          test "${tag}" = "${addon_version}"
+
+      - name: Ensure changelog entry exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "## [${GITHUB_REF_NAME#v}] -" CHANGELOG.md
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes_file="RELEASE_NOTES_${GITHUB_REF_NAME}.md"
+          if [ -f "${notes_file}" ]; then
+            cp "${notes_file}" release-notes.md
+          else
+            awk 'BEGIN{capture=0} /^## \['"${GITHUB_REF_NAME#v}"'\] -/{capture=1; next} /^## \[/{capture=0} capture {print}' CHANGELOG.md > release-notes.md
+          fi
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md

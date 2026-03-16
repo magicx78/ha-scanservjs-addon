@@ -1,6 +1,8 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
 ENV ENABLE_BROTHER_SUPPORT=false
@@ -19,9 +21,9 @@ RUN curl -fsSL -o /tmp/bashio.tar.gz "https://github.com/hassio-addons/bashio/ar
     && rm -rf /tmp/bashio /tmp/bashio.tar.gz
 
 COPY config.local.js /etc/scanservjs/config.local.js
-COPY run.sh /run.sh
-RUN chmod +x /run.sh
+COPY run.sh /usr/local/bin/run.sh
+RUN chmod +x /usr/local/bin/run.sh
 
 EXPOSE 8080
 
-ENTRYPOINT ["/run.sh"]
+ENTRYPOINT ["/usr/local/bin/run.sh"]

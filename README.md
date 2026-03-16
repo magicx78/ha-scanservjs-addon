@@ -2,33 +2,36 @@
 
 `scanservjs` provides a web UI for SANE-compatible scanners on Home Assistant OS. This repository packages scanservjs as a custom Home Assistant add-on for `amd64` systems and optionally supports Brother devices through `brscan4`.
 
-## Status
+## Purpose
 
-- Release target: `v1.0.0`
-- Primary architecture: `amd64`
-- Add-on slug: `scanservjs`
-- Repository URL: [https://github.com/hoenas/ha-scanservjs-addon](https://github.com/hoenas/ha-scanservjs-addon)
+This add-on targets a stable, maintainable `scanservjs` deployment for Home Assistant OS with:
+
+- ingress-enabled web access
+- reproducible Docker builds
+- semantically versioned releases
+- optional Brother `brscan4` integration behind explicit opt-in controls
+
+## Supported Architecture
+
+- Primary target: `amd64`
+- Not currently released: `aarch64`
 
 ## Installation
 
 1. In Home Assistant, open `Settings` -> `Add-ons` -> `Add-on Store`.
 2. Open the repository menu and choose `Repositories`.
-3. Add `https://github.com/hoenas/ha-scanservjs-addon`.
+3. Add the custom repository URL you want to consume.
 4. Install `scanservjs Scan Server`.
-5. Configure the addon options and start the addon.
+5. Configure the add-on and start it.
 
-## Core Configuration
+Repository URLs:
 
-Available options in `scanservjs/config.yaml`:
+- Upstream repository: [https://github.com/hoenas/ha-scanservjs-addon](https://github.com/hoenas/ha-scanservjs-addon)
+- Fork with release workflow: [https://github.com/magicx78/ha-scanservjs-addon](https://github.com/magicx78/ha-scanservjs-addon)
 
-- `saned_net_hosts`: semicolon-separated SANE network backends to append to `/etc/sane.d/net.conf`
-- `airscan_devices`: semicolon-separated device entries to inject into `/etc/sane.d/airscan.conf`
-- `copy_scans_to`: directory to copy completed scans to
-- `ocr_lang`: Tesseract OCR languages, for example `deu+eng`
-- `scanimage_list_ignore`: pass-through flag for scanservjs environments
-- `devices`: optional scanner device filter
+## Configuration
 
-Example:
+### Generic SANE mode
 
 ```yaml
 saned_net_hosts: "192.168.1.10;192.168.1.11"
@@ -37,93 +40,126 @@ scanimage_list_ignore: false
 devices: ""
 ocr_lang: "deu+eng"
 copy_scans_to: "/share/paperless/consume"
+brother_enable: false
 ```
 
-## Brother Support
-
-Brother support is optional and disabled by default.
-
-Controls:
-
-- `brother_enable`: enables Brother setup logic from addon options
-- `brother_accept_eula`: must be `true` before any proprietary driver download or installation happens
-- `brother_driver_source`: `auto`, `url`, or `local`
-- `brother_driver_url`: direct download URL if `brother_driver_source=url`
-- `brother_driver_local_path`: local `.deb` path if `brother_driver_source=local`
-- `brother_register_scanner`: controls `brsaneconfig4` registration on startup
-- `brother_overwrite_existing`: removes an existing Brother registration before re-adding it
-
-Feature flag fallback:
-
-- `ENABLE_BROTHER_SUPPORT=false` keeps the container in generic SANE mode even if Brother addon options are set
-
-Example for a Brother MFC-L2700DW:
+### Brother-enabled mode
 
 ```yaml
+saned_net_hosts: ""
+airscan_devices: ""
+scanimage_list_ignore: false
+devices: ""
+ocr_lang: "deu+eng"
+copy_scans_to: "/share/paperless/consume"
 brother_enable: true
 brother_accept_eula: true
 brother_driver_source: auto
+brother_driver_url: ""
+brother_driver_sha256: ""
+brother_driver_local_path: "/share/brscan4.amd64.deb"
 brother_register_scanner: true
 brother_scanner_name: "MFC_L2700DW"
 brother_scanner_model: "MFC-L2700DW"
 brother_scanner_ip: "192.168.1.50"
+brother_scanner_nodename: ""
 brother_overwrite_existing: false
 ```
 
-Equivalent manual registration inside the container:
+### Option reference
 
-```bash
-brsaneconfig4 -a "name=MFC_L2700DW" "model=MFC-L2700DW" "ip=192.168.1.50"
-brsaneconfig4 -q
-```
+- `saned_net_hosts`: semicolon-separated hosts appended idempotently to `/etc/sane.d/net.conf`
+- `airscan_devices`: semicolon-separated device lines inserted into `/etc/sane.d/airscan.conf`
+- `scanimage_list_ignore`: optional scanservjs environment toggle
+- `devices`: optional device filter forwarded to scanservjs
+- `ocr_lang`: Tesseract OCR language selection such as `deu+eng`
+- `copy_scans_to`: target directory for completed scans
+- `brother_enable`: enables Brother setup logic
+- `brother_accept_eula`: required before proprietary Brother download or install
+- `brother_driver_source`: `auto`, `url`, or `local`
+- `brother_driver_url`: direct `.deb` URL for `url` mode
+- `brother_driver_sha256`: optional integrity check for downloaded package
+- `brother_driver_local_path`: local `.deb` path for `local` mode
+- `brother_register_scanner`: runs `brsaneconfig4` during startup
+- `brother_scanner_name`: registration name used by `brsaneconfig4`
+- `brother_scanner_model`: Brother model string
+- `brother_scanner_ip`: scanner IP for network registration
+- `brother_scanner_nodename`: optional nodename instead of IP
+- `brother_overwrite_existing`: removes existing Brother registration before adding a new one
+
+## USB vs Network
+
+USB devices:
+
+- require the scanner to be attached before add-on start
+- depend on Home Assistant device passthrough and permissions
+
+Network devices:
+
+- are preferred for Home Assistant OS deployments
+- can be configured through `saned_net_hosts`, `airscan_devices`, or Brother registration
+- work best with static DHCP reservations or stable hostnames
+
+## Brother Notes
+
+Brother support is optional and disabled by default.
+
+Variant A: stable generic add-on
+
+- leave `brother_enable: false`
+- keep `ENABLE_BROTHER_SUPPORT=false`
+- rely on generic SANE backends only
+
+Variant B: optional Brother mode
+
+- set `brother_enable: true`
+- set `brother_accept_eula: true`
+- choose `auto`, `url`, or `local` package source
+- verify registration with `brsaneconfig4 -q`
+
+The container-level fallback remains available through `ENABLE_BROTHER_SUPPORT=false`, which forces generic SANE mode even if Brother options are set.
 
 ## Troubleshooting
 
-### Scanner not detected
+Scanner not detected:
 
-- Check addon logs in Home Assistant.
-- Open a shell in the addon container and run `scanimage -L`.
-- Verify `saned_net_hosts` and `airscan_devices` are correct.
+- inspect add-on logs
+- run `scanimage -L` inside the container
+- confirm `saned_net_hosts` and `airscan_devices`
 
-### USB passthrough
+Ingress or Web UI unavailable:
 
-- Attach the scanner before the addon starts.
-- Restart the addon after reconnecting the device.
-- If `scanimage -L` works only as root on another system, this usually indicates permissions or device mapping issues.
+- verify the add-on reached the `started` state
+- confirm ingress is enabled
+- test direct port `8080` if ingress debugging is needed
 
-### Network scanner
+Brother registration issues:
 
-- Prefer static DHCP reservations or a stable Brother nodename.
-- For Brother devices, confirm registration with `brsaneconfig4 -q`.
-- If driver installation fails, set generic SANE mode by leaving `brother_enable=false` or forcing `ENABLE_BROTHER_SUPPORT=false`.
+- confirm EULA acceptance
+- validate the package source or local `.deb` path
+- run `brsaneconfig4 -q`
+- fall back to generic mode if Brother tooling fails
 
-## Validation Commands
+Known limits:
 
-Local checks used for this repository:
+- `amd64` is the only release target at the moment
+- Brother `auto` download still depends on Brother-hosted metadata and package availability
+- full runtime validation on HAOS remains a manual test activity
 
-```bash
-bash -n scanservjs/run.sh
-node --check scanservjs/config.local.js
-docker build -t ha-scanservjs-addon:test ./scanservjs
-```
+## CI and Validation
 
-## Test Plan
+Automated CI currently covers:
 
-Target environment: Home Assistant OS on `amd64`.
+- `yamllint`
+- `bash -n scanservjs/run.sh`
+- `shellcheck`
+- `node --check scanservjs/config.local.js`
+- `docker build --build-arg BUILD_FROM=sbs20/scanservjs:v3.0.3 ./scanservjs`
+- Trivy SARIF upload for vulnerability review
 
-1. Add the repository to the Home Assistant Add-on Store.
-2. Install the addon.
-3. Start the addon and confirm it reaches the `started` state.
-4. Open the web UI through ingress or port `8080`.
-5. Verify scanner discovery with `scanimage -L`.
-6. Perform a test scan and confirm the file lands in `copy_scans_to`.
-7. Test OCR with `ocr_lang` set to a valid language pair.
-8. Enable Brother support and verify `brsaneconfig4 -q` plus `scanimage -L`.
+## Upgrade Notes
 
-## Release Process
-
-1. Ensure CI is green.
-2. Confirm Home Assistant OS smoke tests passed.
-3. Update `CHANGELOG.md` if needed.
-4. Tag the release as `v1.0.0`.
-5. Publish GitHub release notes.
+- `config.yml` was replaced by `config.yaml`
+- `build.json` was replaced by `build.yaml`
+- Brother support stays opt-in and disabled by default
+- users upgrading from older snapshots should re-check add-on options after installation

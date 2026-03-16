@@ -1,0 +1,55 @@
+configuration:
+  saned_net_hosts:
+    name: SANE network hosts
+    description: Semicolon-separated hosts appended to /etc/sane.d/net.conf.
+  airscan_devices:
+    name: Airscan devices
+    description: Semicolon-separated entries inserted into /etc/sane.d/airscan.conf.
+  scanimage_list_ignore:
+    name: Ignore scanimage list
+    description: Enables the scanimage list ignore environment flag when needed.
+  devices:
+    name: Device filter
+    description: Optional scanner device filter forwarded to scanservjs.
+  ocr_lang:
+    name: OCR languages
+    description: Tesseract OCR languages, for example deu+eng.
+  copy_scans_to:
+    name: Copy scans to
+    description: Directory where completed scans are copied.
+  brother_enable:
+    name: Enable Brother support
+    description: Activates optional Brother brscan4 setup logic.
+  brother_accept_eula:
+    name: Accept Brother EULA
+    description: Must be enabled before downloading or installing proprietary Brother drivers.
+  brother_driver_source:
+    name: Brother driver source
+    description: Choose whether the Brother driver is resolved automatically, from a URL, or from a local file.
+  brother_driver_url:
+    name: Brother driver URL
+    description: Direct URL to a Brother brscan4 Debian package.
+  brother_driver_sha256:
+    name: Brother driver SHA256
+    description: Optional SHA256 checksum used to verify the downloaded package.
+  brother_driver_local_path:
+    name: Brother driver local path
+    description: Local path to a Brother brscan4 Debian package, for example under /share.
+  brother_register_scanner:
+    name: Register Brother scanner
+    description: Runs brsaneconfig4 registration during startup.
+  brother_scanner_name:
+    name: Brother scanner name
+    description: Registration name for the Brother scanner.
+  brother_scanner_model:
+    name: Brother scanner model
+    description: Brother model string used by brsaneconfig4.
+  brother_scanner_ip:
+    name: Brother scanner IP
+    description: IP address used for Brother network registration.
+  brother_scanner_nodename:
+    name: Brother scanner nodename
+    description: Optional nodename used instead of an IP address.
+  brother_overwrite_existing:
+    name: Overwrite Brother registration
+    description: Removes an existing Brother entry before re-registering it.

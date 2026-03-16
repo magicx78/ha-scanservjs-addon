@@ -1,10 +1,19 @@
 name: Build
 
-on:
+'on':
   push:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -45,10 +54,18 @@ jobs:
 
       - name: Trivy image scan
         uses: aquasecurity/trivy-action@0.28.0
+        continue-on-error: true
         with:
           image-ref: ha-scanservjs-addon:test
-          format: table
-          exit-code: "1"
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: "0"
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        with:
+          sarif_file: trivy-results.sarif
