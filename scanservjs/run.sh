@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r6"
+RUNTIME_REVISION="2026-03-16-r7"
 
 log() {
   bashio::log.info "$*"
@@ -151,6 +151,22 @@ discover_brother_device_ids() {
     command -v brscan-skey >/dev/null 2>&1 && brscan-skey -l 2>/dev/null || true
     command -v brsaneconfig4 >/dev/null 2>&1 && brsaneconfig4 -q 2>/dev/null || true
   } | grep -Eo 'brother[0-9]+:net[0-9]+;dev[0-9]+' | awk '!seen[$0]++' || true
+}
+
+probe_brother_device_ids() {
+  local net_idx dev_idx candidate
+  local output
+
+  command -v scanimage >/dev/null 2>&1 || return 0
+
+  for net_idx in 1 2 3 4; do
+    for dev_idx in 0 1; do
+      candidate="brother4:net${net_idx};dev${dev_idx}"
+      if output="$(scanimage -A -d "$candidate" 2>&1)" && grep -Fq "All options specific to device" <<<"$output"; then
+        printf "%s\n" "$candidate"
+      fi
+    done
+  done | awk '!seen[$0]++'
 }
 
 ensure_brother_sane_links() {
@@ -505,6 +521,9 @@ main() {
     if [[ -z "$DEVICES" || "$DEVICES" == "null" ]]; then
       local brother_devices
       brother_devices="$(discover_brother_device_ids | join_delim_lines || true)"
+      if [[ -z "$brother_devices" ]]; then
+        brother_devices="$(probe_brother_device_ids | join_delim_lines || true)"
+      fi
       if [[ -n "$brother_devices" ]]; then
         DEVICES="$brother_devices"
         export DEVICES
