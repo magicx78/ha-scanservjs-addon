@@ -145,6 +145,8 @@ install_brscan4() {
 
   dpkg -i "$deb" || true
   apt-get -y -f install
+  apt-get clean
+  rm -rf /var/lib/apt/lists/*
   rm -f "$deb"
   ensure_line "brother4" "/etc/sane.d/dll.conf"
 }
@@ -223,6 +225,10 @@ main() {
 
   local benable
   benable="$(opt '.brother_enable // false')"
+  if [[ "${ENABLE_BROTHER_SUPPORT}" != "true" ]]; then
+    benable="false"
+    log "Brother Support per ENABLE_BROTHER_SUPPORT=false deaktiviert"
+  fi
   if [[ "$benable" == "true" ]]; then
     local baccept bsrc burl bsha blocal doreg bname bmodel bip bnode bow
     log "Brother Support aktiviert"
