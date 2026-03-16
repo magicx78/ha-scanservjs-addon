@@ -43,8 +43,8 @@ options:
   ocr_lang: "deu+eng"
   copy_scans_to: "/share/paperless/consume"
 
-  brother_enable: false
-  brother_accept_eula: false
+  brother_enable: true
+  brother_accept_eula: true
   brother_driver_source: "auto"
   brother_driver_url: ""
   brother_driver_sha256: ""
@@ -53,14 +53,14 @@ options:
   brother_register_scanner: true
   brother_scanner_name: "Brother"
   brother_scanner_model: "MFC-L2700DW"
-  brother_scanner_ip: ""
+  brother_scanner_ip: "10.10.10.216"
   brother_scanner_nodename: ""
   brother_overwrite_existing: false
   brother_button_scan_format: "jpeg"
   brother_button_scan_args_file: ""
   brother_button_scan_args_email: ""
-  brother_trigger_image_webhook_id: ""
-  brother_trigger_ocr_webhook_id: ""
+  brother_trigger_image_webhook_id: "scanservjs_brother_image"
+  brother_trigger_ocr_webhook_id: "scanservjs_brother_ocr"
 
 schema:
   saned_net_hosts: str?
