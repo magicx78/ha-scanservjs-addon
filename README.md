@@ -122,6 +122,7 @@ For `paperless-ngx`, this setup works well in practice:
 - photos or color-heavy pages: color scans only when needed
 
 Brother frontpanel scans in this add-on currently use `skey-scanimage` and produce `TIFF` files. `paperless-ngx` can ingest them reliably, but they are usually larger than medium-quality PDF/JPG pipelines.
+When `copy_scans_to` points to `/share/paperless...`, Brother button `TIFF` files are automatically converted to `JPG` before copying to improve Paperless ingest compatibility.
 
 ## USB vs Network
 

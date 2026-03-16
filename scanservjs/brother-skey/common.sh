@@ -174,20 +174,71 @@ append_skey_args() {
   fi
 }
 
+paperless_target_enabled() {
+  [[ "${COPY_SCANS_TO:-}" == /share/paperless* ]]
+}
+
+prepare_paperless_copy_source() {
+  local output_file="$1"
+  local ext converted_file
+
+  ext="${output_file##*.}"
+  ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+  case "$ext" in
+    tif|tiff)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  if ! command -v convert >/dev/null 2>&1; then
+    button_log "warn" "paperless compatibility conversion skipped: convert not found"
+    return 1
+  fi
+
+  converted_file="${output_file%.*}.jpg"
+  if convert "${output_file}" -strip -quality 92 "${converted_file}" >/tmp/scanservjs-brother-convert.log 2>&1 && [[ -s "${converted_file}" ]]; then
+    button_log "info" "paperless compatibility conversion created ${converted_file}"
+    printf '%s\n' "${converted_file}"
+    return 0
+  fi
+
+  button_log "warn" "paperless compatibility conversion failed for ${output_file}: $(cat /tmp/scanservjs-brother-convert.log 2>/dev/null || printf '<leer>')"
+  rm -f "${converted_file}"
+  return 1
+}
+
 copy_scan_output() {
   local output_file="$1"
+  local copy_file="${output_file}"
+  local cleanup_copy_file="false"
+  local converted_file=""
 
   if [[ -z "${COPY_SCANS_TO:-}" || "${COPY_SCANS_TO}" == "null" ]]; then
     return 0
   fi
 
+  if paperless_target_enabled; then
+    if converted_file="$(prepare_paperless_copy_source "${output_file}")"; then
+      copy_file="${converted_file}"
+      cleanup_copy_file="true"
+    fi
+  fi
+
   mkdir -p "${COPY_SCANS_TO}" 2>/dev/null || true
-  if ! cp -f "${output_file}" "${COPY_SCANS_TO}/"; then
-    button_log "error" "copy failed target=${COPY_SCANS_TO} file=${output_file}"
+  if ! cp -f "${copy_file}" "${COPY_SCANS_TO}/"; then
+    button_log "error" "copy failed target=${COPY_SCANS_TO} file=${copy_file}"
+    if [[ "${cleanup_copy_file}" == "true" ]]; then
+      rm -f "${copy_file}"
+    fi
     return 1
   fi
 
-  button_log "info" "copied output to ${COPY_SCANS_TO}/$(basename "${output_file}")"
+  button_log "info" "copied output to ${COPY_SCANS_TO}/$(basename "${copy_file}")"
+  if [[ "${cleanup_copy_file}" == "true" ]]; then
+    rm -f "${copy_file}"
+  fi
 }
 
 scan_via_profile() {
