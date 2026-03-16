@@ -153,6 +153,46 @@ resolve_copy_scans_to() {
   esac
 }
 
+validate_sorter_config() {
+  if [[ "${SORTER_ENABLE}" != "true" ]]; then
+    return 0
+  fi
+
+  if [[ -z "${PAPERLESS_URL}" || "${PAPERLESS_URL}" == "null" ]]; then
+    err "sorter_enable=true, aber paperless_url ist leer."
+    return 1
+  fi
+  if [[ ! "${PAPERLESS_URL}" =~ ^https?:// ]]; then
+    err "paperless_url muss mit http:// oder https:// beginnen."
+    return 1
+  fi
+  if [[ -z "${PAPERLESS_TOKEN}" || "${PAPERLESS_TOKEN}" == "null" ]]; then
+    err "sorter_enable=true, aber paperless_token ist leer."
+    return 1
+  fi
+  if [[ "${SORTER_PROVIDER}" != "anthropic" && "${SORTER_PROVIDER}" != "openai" ]]; then
+    err "sorter_provider muss 'anthropic' oder 'openai' sein."
+    return 1
+  fi
+  if [[ "${SORTER_PROVIDER}" == "anthropic" && -z "${ANTHROPIC_API_KEY:-}" ]]; then
+    warn "SORTER_PROVIDER=anthropic, aber ANTHROPIC_API_KEY ist nicht gesetzt."
+  fi
+  if [[ "${SORTER_PROVIDER}" == "openai" && -z "${OPENAI_API_KEY:-}" ]]; then
+    warn "SORTER_PROVIDER=openai, aber OPENAI_API_KEY ist nicht gesetzt."
+  fi
+  if [[ "${SORTER_CONFIDENCE_THRESHOLD}" =~ ^[0-9]+$ ]]; then
+    if (( SORTER_CONFIDENCE_THRESHOLD < 0 || SORTER_CONFIDENCE_THRESHOLD > 100 )); then
+      err "sorter_confidence_threshold muss zwischen 0 und 100 liegen."
+      return 1
+    fi
+  else
+    err "sorter_confidence_threshold muss eine Zahl sein."
+    return 1
+  fi
+
+  mkdir -p "${SORTER_INBOX_DIR}" "${SORTER_REVIEW_DIR}" "${SORTER_PROCESSED_DIR}" "${SORTER_STATE_DIR}" || true
+}
+
 split_delim_lines() {
   printf "%s" "$1" | tr "${DELIMITER}" '\n' | sed '/^[[:space:]]*$/d'
 }
@@ -655,6 +695,8 @@ register_brother() {
 
 main() {
   export SANED_NET_HOSTS AIRSCAN_DEVICES SCANIMAGE_LIST_IGNORE DEVICES OCR_LANG COPY_SCANS_TO
+  export SORTER_ENABLE SORTER_CONFIDENCE_THRESHOLD SORTER_PROVIDER SORTER_MODEL PAPERLESS_URL PAPERLESS_TOKEN
+  export SORTER_INBOX_DIR SORTER_REVIEW_DIR SORTER_PROCESSED_DIR SORTER_STATE_DIR
   export BROTHER_BUTTON_OUTPUT_DIR_OVERRIDE
   export BROTHER_BUTTON_DEFAULT_RESOLUTION BROTHER_BUTTON_SCAN_FORMAT BROTHER_BUTTON_SCAN_ARGS_FILE BROTHER_BUTTON_SCAN_ARGS_EMAIL
   export BROTHER_IMAGE_OUTPUT_FORMAT BROTHER_OCR_OUTPUT_FORMAT
@@ -679,6 +721,16 @@ main() {
   COPY_SCANS_TO="$(resolve_copy_scans_to "$copy_scans_to_mode" "$copy_scans_to_custom")"
   local generic_scanner_ip
   generic_scanner_ip="$(opt '.generic_scanner_ip // ""')"
+  SORTER_ENABLE="$(opt '.sorter_enable // false')"
+  SORTER_CONFIDENCE_THRESHOLD="$(opt '.sorter_confidence_threshold // 75')"
+  SORTER_PROVIDER="$(opt '.sorter_provider // "anthropic"')"
+  SORTER_MODEL="$(opt '.sorter_model // "claude-sonnet-4-20250514"')"
+  PAPERLESS_URL="$(opt '.paperless_url // ""')"
+  PAPERLESS_TOKEN="$(opt '.paperless_token // ""')"
+  SORTER_INBOX_DIR="$(opt '.sorter_inbox_dir // "/data/output"')"
+  SORTER_REVIEW_DIR="$(opt '.sorter_review_dir // "/data/output"')"
+  SORTER_PROCESSED_DIR="$(opt '.sorter_processed_dir // "/data/processed"')"
+  SORTER_STATE_DIR="$(opt '.sorter_state_dir // "/data/sorter-state"')"
   BROTHER_BUTTON_OUTPUT_DIR_OVERRIDE="$(opt '.brother_button_output_dir // ""')"
   BROTHER_BUTTON_DEFAULT_RESOLUTION="$(opt '.brother_button_default_resolution // 300')"
   BROTHER_BUTTON_SCAN_FORMAT="$(opt '.brother_button_scan_format // "jpeg"')"
@@ -699,6 +751,7 @@ main() {
   fi
 
   configure_scanimage_discovery "$SCANIMAGE_LIST_IGNORE"
+  validate_sorter_config
 
   ensure_line "airscan" "/etc/sane.d/dll.conf"
 
