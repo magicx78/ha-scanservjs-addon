@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r3"
+RUNTIME_REVISION="2026-03-16-r4"
 
 log() {
   bashio::log.info "$*"
@@ -95,6 +95,21 @@ split_delim_lines() {
   printf "%s" "$1" | tr "${DELIMITER}" '\n' | sed '/^[[:space:]]*$/d'
 }
 
+join_delim_lines() {
+  local first="true"
+  local line
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    if [[ "$first" == "true" ]]; then
+      printf "%s" "$line"
+      first="false"
+    else
+      printf "%s%s" "${DELIMITER}" "$line"
+    fi
+  done
+}
+
 ensure_line() {
   local line="$1"
   local file="$2"
@@ -117,6 +132,25 @@ brsane_supports_q() {
 
 brother_cfg_file() {
   echo "/etc/opt/brother/scanner/brscan4/brsanenetdevice4.cfg"
+}
+
+configure_scanimage_discovery() {
+  local ignore="$1"
+
+  if [[ "$ignore" == "true" ]]; then
+    export SCANIMAGE_LIST_IGNORE="true"
+    log "scanservjs Discovery: scanimage -L deaktiviert"
+  else
+    unset SCANIMAGE_LIST_IGNORE
+    log "scanservjs Discovery: scanimage -L aktiviert"
+  fi
+}
+
+discover_brother_device_ids() {
+  {
+    command -v brscan-skey >/dev/null 2>&1 && brscan-skey -l 2>/dev/null || true
+    command -v brsaneconfig4 >/dev/null 2>&1 && brsaneconfig4 -q 2>/dev/null || true
+  } | grep -Eo 'brother[0-9]+:net[0-9]+;dev[0-9]+' | awk '!seen[$0]++'
 }
 
 ensure_brother_sane_links() {
@@ -409,6 +443,8 @@ main() {
   local fallback_scanner_ip
   fallback_scanner_ip="$(opt '.brother_scanner_ip // ""')"
 
+  configure_scanimage_discovery "$SCANIMAGE_LIST_IGNORE"
+
   ensure_line "airscan" "/etc/sane.d/dll.conf"
 
   if [[ -n "$COPY_SCANS_TO" && "$COPY_SCANS_TO" != "null" ]]; then
@@ -460,12 +496,25 @@ main() {
       configure_brscan_skey "$bip"
     fi
     start_brscan_skey
+
+    if [[ -z "$DEVICES" || "$DEVICES" == "null" ]]; then
+      local brother_devices
+      brother_devices="$(discover_brother_device_ids | join_delim_lines)"
+      if [[ -n "$brother_devices" ]]; then
+        DEVICES="$brother_devices"
+        export DEVICES
+        log "Brother Device-Fallback fuer scanservjs gesetzt: ${DEVICES}"
+      fi
+    fi
   else
     log "Brother Support deaktiviert"
   fi
 
   if command -v brsaneconfig4 >/dev/null 2>&1; then
     log_cmd_output "brsaneconfig4 -q" brsaneconfig4 -q
+  fi
+  if command -v brscan-skey >/dev/null 2>&1; then
+    log_cmd_output "brscan-skey -l" brscan-skey -l
   fi
   log_cmd_output "scanimage -L" scanimage -L
 
