@@ -263,6 +263,21 @@ Known limits:
 - Brother `auto` download still depends on Brother-hosted metadata and package availability
 - `brscan-skey` may remain unavailable in some environments without blocking generic SANE scanning
 
+## Legal and Community Sharing
+
+This repository is an unofficial community project.
+
+- sharing setup guides, examples, and sanitized logs is fine
+- do not mirror or re-upload proprietary Brother driver packages
+- use an explicit disclaimer in forum posts:
+  - `Unofficial community add-on. Not affiliated with Home Assistant or Brother.`
+
+Reference files in this repository:
+
+- `LICENSE`
+- `LEGAL_FORUM_SHARING.md`
+- `FORUM_POST_TEMPLATE_DE.md`
+
 ## CI and Validation
 
 Automated CI currently covers:
