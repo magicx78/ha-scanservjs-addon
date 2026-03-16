@@ -17,6 +17,18 @@ err() {
   bashio::log.error "$*"
 }
 
+log_cmd_output() {
+  local label="$1"
+  shift
+  local output
+
+  if output="$("$@" 2>&1)"; then
+    log "${label}: ${output:-<leer>}"
+  else
+    warn "${label} fehlgeschlagen: ${output:-<leer>}"
+  fi
+}
+
 opt() {
   local query="$1"
   jq -r "${query}" "${CONFIG_PATH}"
@@ -280,6 +292,11 @@ main() {
   else
     log "Brother Support deaktiviert"
   fi
+
+  if command -v brsaneconfig4 >/dev/null 2>&1; then
+    log_cmd_output "brsaneconfig4 -q" brsaneconfig4 -q
+  fi
+  log_cmd_output "scanimage -L" scanimage -L
 
   local app_dir
   if ! app_dir="$(detect_app_dir)"; then
