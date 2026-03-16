@@ -56,6 +56,11 @@ options:
   brother_scanner_ip: ""
   brother_scanner_nodename: ""
   brother_overwrite_existing: false
+  brother_button_scan_format: "jpeg"
+  brother_button_scan_args_file: ""
+  brother_button_scan_args_email: ""
+  brother_trigger_image_webhook_id: ""
+  brother_trigger_ocr_webhook_id: ""
 
 schema:
   saned_net_hosts: str?
@@ -77,3 +82,8 @@ schema:
   brother_scanner_ip: str?
   brother_scanner_nodename: str?
   brother_overwrite_existing: bool?
+  brother_button_scan_format: str?
+  brother_button_scan_args_file: str?
+  brother_button_scan_args_email: str?
+  brother_trigger_image_webhook_id: str?
+  brother_trigger_ocr_webhook_id: str?

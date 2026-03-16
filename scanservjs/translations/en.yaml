@@ -53,3 +53,18 @@ configuration:
   brother_overwrite_existing:
     name: Overwrite Brother registration
     description: Removes an existing Brother entry before re-registering it.
+  brother_button_scan_format:
+    name: Brother button scan format
+    description: Output format used by Brother Scan to File and Scan to Email button actions, for example jpeg or png.
+  brother_button_scan_args_file:
+    name: Brother file button scan args
+    description: Optional extra scanimage arguments for the Brother Scan to File button, separated by spaces.
+  brother_button_scan_args_email:
+    name: Brother email button scan args
+    description: Optional extra scanimage arguments for the Brother Scan to Email button, separated by spaces.
+  brother_trigger_image_webhook_id:
+    name: Brother image webhook ID
+    description: Optional Home Assistant webhook ID triggered by the Brother Scan to Image button.
+  brother_trigger_ocr_webhook_id:
+    name: Brother OCR webhook ID
+    description: Optional Home Assistant webhook ID triggered by the Brother Scan to OCR button.

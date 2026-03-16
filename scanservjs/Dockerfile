@@ -21,8 +21,9 @@ RUN curl -fsSL -o /tmp/bashio.tar.gz "https://github.com/hassio-addons/bashio/ar
     && rm -rf /tmp/bashio /tmp/bashio.tar.gz
 
 COPY config.local.js /etc/scanservjs/config.local.js
+COPY brother-skey /opt/scanservjs-brother-skey
 COPY run.sh /usr/local/bin/run.sh
-RUN chmod +x /usr/local/bin/run.sh
+RUN chmod +x /usr/local/bin/run.sh /opt/scanservjs-brother-skey/*.sh
 
 EXPOSE 8080
 

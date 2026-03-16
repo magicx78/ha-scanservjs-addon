@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r7"
+RUNTIME_REVISION="2026-03-16-r8"
 
 log() {
   bashio::log.info "$*"
@@ -134,6 +134,25 @@ brother_cfg_file() {
   echo "/etc/opt/brother/scanner/brscan4/brsanenetdevice4.cfg"
 }
 
+brother_button_template_dir() {
+  echo "/opt/scanservjs-brother-skey"
+}
+
+brother_button_target_dir() {
+  echo "/opt/brother/scanner/brscan-skey/script"
+}
+
+first_delim_item() {
+  printf "%s" "$1" | tr "${DELIMITER}" '\n' | sed -n '/^[[:space:]]*$/d;1p'
+}
+
+write_shell_var() {
+  local name="$1"
+  local value="$2"
+
+  printf '%s=%q\n' "$name" "$value"
+}
+
 configure_scanimage_discovery() {
   local ignore="$1"
 
@@ -208,6 +227,58 @@ setup_brother_library_paths() {
     export LD_LIBRARY_PATH="${extras}"
   fi
   log "LD_LIBRARY_PATH fuer Brother gesetzt"
+}
+
+install_brother_button_scripts() {
+  local src_dir dst_dir file
+
+  src_dir="$(brother_button_template_dir)"
+  dst_dir="$(brother_button_target_dir)"
+
+  if [[ ! -d "$src_dir" ]]; then
+    warn "Brother Button-Skriptquelle fehlt: ${src_dir}"
+    return 0
+  fi
+
+  mkdir -p "$dst_dir"
+  shopt -s nullglob
+  for file in "$src_dir"/*.sh; do
+    install -m 0755 "$file" "${dst_dir}/$(basename "$file")"
+  done
+  shopt -u nullglob
+
+  log "Brother Button-Skripte installiert: ${dst_dir}"
+}
+
+write_brother_button_env() {
+  local scanner_name="$1"
+  local env_file default_device
+
+  env_file="$(brother_button_target_dir)/scanservjs.env"
+  mkdir -p "$(dirname "$env_file")"
+
+  default_device="$(first_delim_item "${DEVICES:-}")"
+  if [[ -z "$default_device" ]]; then
+    default_device="$(discover_brother_device_ids | head -n 1 || true)"
+  fi
+  if [[ -z "$default_device" ]]; then
+    default_device="$(probe_brother_device_ids | head -n 1 || true)"
+  fi
+
+  {
+    write_shell_var "COPY_SCANS_TO" "${COPY_SCANS_TO:-}"
+    write_shell_var "BROTHER_BUTTON_SCAN_FORMAT" "${BROTHER_BUTTON_SCAN_FORMAT:-jpeg}"
+    write_shell_var "BROTHER_BUTTON_SCAN_ARGS_FILE" "${BROTHER_BUTTON_SCAN_ARGS_FILE:-}"
+    write_shell_var "BROTHER_BUTTON_SCAN_ARGS_EMAIL" "${BROTHER_BUTTON_SCAN_ARGS_EMAIL:-}"
+    write_shell_var "BROTHER_TRIGGER_IMAGE_WEBHOOK_ID" "${BROTHER_TRIGGER_IMAGE_WEBHOOK_ID:-}"
+    write_shell_var "BROTHER_TRIGGER_OCR_WEBHOOK_ID" "${BROTHER_TRIGGER_OCR_WEBHOOK_ID:-}"
+    write_shell_var "BROTHER_DEFAULT_DEVICE" "${default_device}"
+    write_shell_var "BROTHER_SCANNER_NAME" "${scanner_name}"
+    write_shell_var "SUPERVISOR_TOKEN" "${SUPERVISOR_TOKEN:-}"
+  } > "$env_file"
+
+  chmod 600 "$env_file"
+  log "Brother Button-Umgebung geschrieben: ${env_file}"
 }
 
 brother_is_registered() {
@@ -447,6 +518,8 @@ register_brother() {
 
 main() {
   export SANED_NET_HOSTS AIRSCAN_DEVICES SCANIMAGE_LIST_IGNORE DEVICES OCR_LANG COPY_SCANS_TO
+  export BROTHER_BUTTON_SCAN_FORMAT BROTHER_BUTTON_SCAN_ARGS_FILE BROTHER_BUTTON_SCAN_ARGS_EMAIL
+  export BROTHER_TRIGGER_IMAGE_WEBHOOK_ID BROTHER_TRIGGER_OCR_WEBHOOK_ID
 
   if [[ ! -f "${CONFIG_PATH}" ]]; then
     err "Addon-Konfiguration fehlt: ${CONFIG_PATH}"
@@ -461,6 +534,11 @@ main() {
   DEVICES="$(opt '.devices // ""')"
   OCR_LANG="$(opt '.ocr_lang // "eng"')"
   COPY_SCANS_TO="$(opt '.copy_scans_to // ""')"
+  BROTHER_BUTTON_SCAN_FORMAT="$(opt '.brother_button_scan_format // "jpeg"')"
+  BROTHER_BUTTON_SCAN_ARGS_FILE="$(opt '.brother_button_scan_args_file // ""')"
+  BROTHER_BUTTON_SCAN_ARGS_EMAIL="$(opt '.brother_button_scan_args_email // ""')"
+  BROTHER_TRIGGER_IMAGE_WEBHOOK_ID="$(opt '.brother_trigger_image_webhook_id // ""')"
+  BROTHER_TRIGGER_OCR_WEBHOOK_ID="$(opt '.brother_trigger_ocr_webhook_id // ""')"
   local fallback_scanner_ip
   fallback_scanner_ip="$(opt '.brother_scanner_ip // ""')"
 
@@ -516,6 +594,8 @@ main() {
     if [[ -n "$bip" && "$bip" != "null" ]]; then
       configure_brscan_skey "$bip"
     fi
+    install_brother_button_scripts
+    write_brother_button_env "$bname"
     start_brscan_skey
 
     if [[ -z "$DEVICES" || "$DEVICES" == "null" ]]; then
