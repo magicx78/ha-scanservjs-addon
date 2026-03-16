@@ -58,14 +58,28 @@ jobs:
         with:
           image-ref: ha-scanservjs-addon:test
           format: sarif
-          output: trivy-results.sarif
+          output: ${{ github.workspace }}/trivy-results.sarif
           exit-code: "0"
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
 
+      - name: Check Trivy SARIF output
+        id: trivy_sarif
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -la "${GITHUB_WORKSPACE}"
+          if [ -f "${GITHUB_WORKSPACE}/trivy-results.sarif" ]; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+            echo "Expected SARIF file was not created" >&2
+          fi
+
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always() && hashFiles('trivy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && steps.trivy_sarif.outputs.exists == 'true'
         with:
-          sarif_file: trivy-results.sarif
+          sarif_file: ${{ github.workspace }}/trivy-results.sarif
