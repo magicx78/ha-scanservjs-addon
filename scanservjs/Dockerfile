@@ -5,7 +5,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
-ENV ENABLE_BROTHER_SUPPORT=false
+ENV ENABLE_BROTHER_SUPPORT=true
 ARG BASHIO_VERSION=v0.16.2
 
 RUN apt-get update \
