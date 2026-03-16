@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r5"
+RUNTIME_REVISION="2026-03-16-r6"
 
 log() {
   bashio::log.info "$*"
@@ -150,7 +150,7 @@ discover_brother_device_ids() {
   {
     command -v brscan-skey >/dev/null 2>&1 && brscan-skey -l 2>/dev/null || true
     command -v brsaneconfig4 >/dev/null 2>&1 && brsaneconfig4 -q 2>/dev/null || true
-  } | grep -Eo 'brother[0-9]+:net[0-9]+;dev[0-9]+' | awk '!seen[$0]++'
+  } | grep -Eo 'brother[0-9]+:net[0-9]+;dev[0-9]+' | awk '!seen[$0]++' || true
 }
 
 ensure_brother_sane_links() {
@@ -504,11 +504,13 @@ main() {
 
     if [[ -z "$DEVICES" || "$DEVICES" == "null" ]]; then
       local brother_devices
-      brother_devices="$(discover_brother_device_ids | join_delim_lines)"
+      brother_devices="$(discover_brother_device_ids | join_delim_lines || true)"
       if [[ -n "$brother_devices" ]]; then
         DEVICES="$brother_devices"
         export DEVICES
         log "Brother Device-Fallback fuer scanservjs gesetzt: ${DEVICES}"
+      else
+        warn "Brother Device-Fallback lieferte keine Device-ID."
       fi
     fi
   else
