@@ -277,6 +277,7 @@ Reference files in this repository:
 - `LICENSE`
 - `LEGAL_FORUM_SHARING.md`
 - `FORUM_POST_TEMPLATE_DE.md`
+- `FORUM_POST_TEMPLATE_HA_COMMUNITY_DE.md`
 
 ## CI and Validation
 
