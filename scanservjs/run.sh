@@ -45,6 +45,18 @@ route_source_for_ip() {
   ip route get "$ip" 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="src") {print $(i+1); exit}}'
 }
 
+normalize_brother_model() {
+  local model="$1"
+  case "$model" in
+    MFC-L2710DW|MFC-L2710DN|MFC-L2712DN)
+      printf "MFC-L2700DW\n"
+      ;;
+    *)
+      printf "%s\n" "$model"
+      ;;
+  esac
+}
+
 detect_app_dir() {
   local candidate
 
@@ -260,14 +272,22 @@ configure_brscan_skey() {
 }
 
 start_brscan_skey() {
-  command -v brscan-skey >/dev/null 2>&1 || return 0
+  local skey_bin=""
+  if command -v brscan-skey >/dev/null 2>&1; then
+    skey_bin="$(command -v brscan-skey)"
+  elif [[ -x /opt/brother/scanner/brscan-skey/brscan-skey ]]; then
+    skey_bin="/opt/brother/scanner/brscan-skey/brscan-skey"
+  else
+    warn "brscan-skey Binary nicht gefunden."
+    return 0
+  fi
 
   if pgrep -x brscan-skey >/dev/null 2>&1; then
     log "brscan-skey laeuft bereits"
     return 0
   fi
 
-  brscan-skey >/tmp/brscan-skey.log 2>&1 &
+  "${skey_bin}" >/tmp/brscan-skey.log 2>&1 &
   sleep 1
 
   if pgrep -x brscan-skey >/dev/null 2>&1; then
@@ -285,6 +305,7 @@ register_brother() {
   local ip="$4"
   local nodename="$5"
   local overwrite="$6"
+  local effective_model
 
   [[ "$do_reg" == "true" ]] || {
     log "Brother Registrierung deaktiviert"
@@ -306,20 +327,25 @@ register_brother() {
     return 1
   fi
 
+  effective_model="$(normalize_brother_model "$model")"
+  if [[ "$effective_model" != "$model" ]]; then
+    warn "Brother Modell-Mapping aktiv: ${model} -> ${effective_model}"
+  fi
+
   if [[ "$overwrite" == "true" ]]; then
     log "overwrite=true - versuche vorhandenen Eintrag ${name} zu entfernen"
     brsaneconfig4 -r "$name" || true
-  elif brother_is_registered "$name" "$model" "$ip" "$nodename"; then
+  elif brother_is_registered "$name" "$effective_model" "$ip" "$nodename"; then
     log "Brother Scanner ${name} ist bereits registriert - skip."
     return 0
   fi
 
   if [[ -n "$nodename" && "$nodename" != "null" ]]; then
     log "Registriere Brother Scanner per nodename=${nodename}"
-    brsaneconfig4 -a "name=${name}" "model=${model}" "nodename=${nodename}"
+    brsaneconfig4 -a "name=${name}" "model=${effective_model}" "nodename=${nodename}"
   else
     log "Registriere Brother Scanner per ip=${ip}"
-    brsaneconfig4 -a "name=${name}" "model=${model}" "ip=${ip}"
+    brsaneconfig4 -a "name=${name}" "model=${effective_model}" "ip=${ip}"
   fi
 }
 
