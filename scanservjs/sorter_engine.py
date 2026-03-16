@@ -570,12 +570,7 @@ def resolve_sources(settings: Settings, state: dict[str, Any]) -> list[Path]:
     settings.inbox_dir.mkdir(parents=True, exist_ok=True)
     processed = set(state.get("processed_sources", []))
     files = []
-    supported_ext = {".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"}
-    for p in sorted(settings.inbox_dir.iterdir()):
-        if not p.is_file():
-            continue
-        if p.suffix.lower() not in supported_ext:
-            continue
+    for p in sorted(settings.inbox_dir.glob("*.pdf")):
         name = p.name
         if name.startswith("REVIEW_"):
             continue
@@ -583,22 +578,6 @@ def resolve_sources(settings: Settings, state: dict[str, Any]) -> list[Path]:
             continue
         files.append(p)
     return files
-
-
-def ensure_pdf_input(source: Path, pdf_dir: Path) -> Path:
-    if source.suffix.lower() == ".pdf":
-        return source
-
-    pdf_dir.mkdir(parents=True, exist_ok=True)
-    out_pdf = pdf_dir / f"{source.stem}.pdf"
-    # convert supports tiff/jpg/png and can output multi-page PDF for multipage TIFF.
-    subprocess.run(
-        ["convert", str(source), str(out_pdf)],
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    return out_pdf
 
 
 def make_review_filename(group: dict[str, Any]) -> str:
@@ -633,12 +612,7 @@ def run_sort(settings: Settings) -> dict[str, Any]:
             return {"status": "noop", "message": "no unprocessed pdf sources"}
 
         client = get_provider_client(settings)
-        normalized_pdf_dir = settings.state_dir / "normalized-inputs"
-        source_pairs: list[tuple[Path, Path]] = []
-        for src in sources:
-            source_pairs.append((src, ensure_pdf_input(src, normalized_pdf_dir)))
-
-        pages = fingerprint_pages(client, settings, [p for _, p in source_pairs])
+        pages = fingerprint_pages(client, settings, sources)
         groups = group_pages(pages)
         paperless = PaperlessClient(settings.paperless_url, settings.paperless_token)
 
@@ -697,7 +671,7 @@ def run_sort(settings: Settings) -> dict[str, Any]:
         processed = set(state.get("processed_sources", []))
         source_archive = settings.processed_dir / "sources"
         source_archive.mkdir(parents=True, exist_ok=True)
-        for src, _pdf in source_pairs:
+        for src in sources:
             processed.add(src.name)
             try:
                 shutil.move(str(src), str(source_archive / src.name))
