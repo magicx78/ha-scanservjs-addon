@@ -8,11 +8,15 @@ function quoteShell(value) {
   return `'${String(value).replace(/'/g, "'\\''")}'`;
 }
 
+function sorterPython() {
+  return process.env.SORTER_PYTHON || '/opt/scanservjs-sorter/.venv/bin/python';
+}
+
 function sorterCommand(subcommand, filePath) {
   if (!filePath) {
-    return `python3 /opt/scanservjs-sorter/sorter_engine.py ${subcommand}`;
+    return `${quoteShell(sorterPython())} /opt/scanservjs-sorter/sorter_engine.py ${subcommand}`;
   }
-  return `python3 /opt/scanservjs-sorter/sorter_engine.py ${subcommand} --review-file ${quoteShell(filePath)}`;
+  return `${quoteShell(sorterPython())} /opt/scanservjs-sorter/sorter_engine.py ${subcommand} --review-file ${quoteShell(filePath)}`;
 }
 
 function sorterEnabled() {

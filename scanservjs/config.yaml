@@ -1,5 +1,5 @@
 ﻿name: "scanservjs Scan Server"
-version: "1.1.1"
+version: "1.1.2"
 slug: "scanservjs"
 description: "scanservjs Web-UI fuer Scanner (SANE) - optional mit Brother brscan4 Auto-Install und MFC-L2700DW Netzwerk-Registrierung."
 url: "https://github.com/magicx78/ha-scanservjs-addon"
@@ -127,4 +127,5 @@ schema:
   brother_button_scan_args_email: str?
   brother_trigger_image_webhook_id: str?
   brother_trigger_ocr_webhook_id: str?
+
 
