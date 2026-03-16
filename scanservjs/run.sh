@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r28"
+RUNTIME_REVISION="2026-03-16-r29"
 
 log() {
   bashio::log.info "$*"
@@ -120,6 +120,11 @@ ensure_generic_airscan_fallbacks() {
   ensure_airscan_config
   ensure_line "Generic eSCL = http://${ip}/eSCL, eSCL" "/etc/sane.d/airscan.conf"
   ensure_line "Generic WSD = http://${ip}/WebServices/ScannerService, WSD" "/etc/sane.d/airscan.conf"
+}
+
+ensure_snmp_runtime_dirs() {
+  local cert_dir="/var/lib/snmp/cert_indexes"
+  mkdir -p "${cert_dir}" 2>/dev/null || true
 }
 
 resolve_copy_scans_to() {
@@ -788,6 +793,7 @@ main() {
   if command -v brscan-skey >/dev/null 2>&1; then
     log_cmd_output_timeout "brscan-skey -l" 5 brscan-skey -l
   fi
+  ensure_snmp_runtime_dirs
   log_cmd_output_timeout "scanimage -L" 10 scanimage -L
 
   local app_dir

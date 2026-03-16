@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.13] - 2026-03-16
+
+### Fixed
+- Startup now pre-creates `/var/lib/snmp/cert_indexes` before `scanimage -L`, reducing the one-time warning:
+  - `scanimage -L fehlgeschlagen: Created directory: /var/lib/snmp/cert_indexes`
+
+### Changed
+- Runtime revision bumped to `2026-03-16-r29`.
+
 ## [1.0.12] - 2026-03-16
 
 ### Added
