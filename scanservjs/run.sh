@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r13"
+RUNTIME_REVISION="2026-03-16-r14"
 
 log() {
   bashio::log.info "$*"
@@ -146,6 +146,19 @@ first_delim_item() {
   printf "%s" "$1" | tr "${DELIMITER}" '\n' | sed -n '/^[[:space:]]*$/d;1p'
 }
 
+first_device_item() {
+  local value="$1"
+  local match=""
+
+  match="$(printf "%s\n" "$value" | grep -Eo 'brother[0-9]+:net[0-9]+;dev[0-9]+' | head -n 1 || true)"
+  if [[ -n "$match" ]]; then
+    printf "%s\n" "$match"
+    return 0
+  fi
+
+  first_delim_item "$value"
+}
+
 write_shell_var() {
   local name="$1"
   local value="$2"
@@ -277,7 +290,7 @@ write_brother_button_env() {
   env_file="$(brother_button_target_dir)/scanservjs.env"
   mkdir -p "$(dirname "$env_file")"
 
-  default_device="$(first_delim_item "${DEVICES:-}")"
+  default_device="$(first_device_item "${DEVICES:-}")"
   if [[ -z "$default_device" ]]; then
     default_device="$(discover_brother_device_ids | head -n 1 || true)"
   fi
@@ -671,7 +684,7 @@ main() {
   fi
   log_cmd_output "scanimage -L" scanimage -L
   if [[ "$benable" == "true" ]]; then
-    warmup_brother_device "$(first_delim_item "${DEVICES:-}")"
+    warmup_brother_device "$(first_device_item "${DEVICES:-}")"
   fi
 
   local app_dir
