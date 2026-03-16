@@ -184,7 +184,8 @@ install_brscan4() {
   local local_path="$5"
   local deb="/tmp/brscan4.amd64.deb"
   local skey_deb="/tmp/brscan-skey.amd64.deb"
-  local skey_url="https://download.brother.com/pub/com/linux/linux/packages/brscan-skey-0.3.2-0.amd64.deb"
+  local skey_url_legacy="https://download.brother.com/welcome/dlf006652/brscan-skey-0.3.2-0.amd64.deb"
+  local skey_url_current="https://download.brother.com/pub/com/linux/linux/packages/brscan-skey-0.3.2-0.amd64.deb"
   local has_brscan4="false"
   local has_skey="false"
 
@@ -250,7 +251,10 @@ install_brscan4() {
   fi
 
   if [[ "$has_skey" != "true" ]]; then
-    curl -fL --retry 3 --retry-delay 2 -o "$skey_deb" "$skey_url"
+    if ! curl -fL --retry 3 --retry-delay 2 -o "$skey_deb" "$skey_url_legacy"; then
+      warn "Legacy brscan-skey URL fehlgeschlagen, versuche aktuelle URL"
+      curl -fL --retry 3 --retry-delay 2 -o "$skey_deb" "$skey_url_current"
+    fi
     dpkg -i "$skey_deb" || true
   fi
 
