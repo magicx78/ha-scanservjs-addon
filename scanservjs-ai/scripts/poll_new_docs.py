@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 import requests
 import yaml
@@ -80,7 +81,7 @@ def main() -> None:
         lock_fh.close()
 
 
-def _get_ki_tag_id(session: requests.Session, base: str) -> int | None:
+def _get_ki_tag_id(session: requests.Session, base: str) -> Optional[int]:
     """Gibt die ID des Tags 'KI-Verarbeitet' zurück (None falls nicht vorhanden)."""
     try:
         resp = session.get(

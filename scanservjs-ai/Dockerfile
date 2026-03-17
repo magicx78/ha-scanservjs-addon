@@ -26,7 +26,8 @@ RUN curl -fsSL -o /tmp/bashio.tar.gz "https://github.com/hassio-addons/bashio/ar
 
 # Python-Abhängigkeiten für KI-Scripts
 COPY scripts/requirements.txt /opt/paperless-ai/requirements.txt
-RUN pip3 install --no-cache-dir --break-system-packages -r /opt/paperless-ai/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r /opt/paperless-ai/requirements.txt \
+    || pip3 install --no-cache-dir -r /opt/paperless-ai/requirements.txt
 
 # KI-Scripts
 COPY scripts/ /opt/paperless-ai/

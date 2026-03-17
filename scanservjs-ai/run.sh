@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-16-r29"
+RUNTIME_REVISION="2026-03-17-r30"
 AI_SCRIPTS_DIR="/opt/paperless-ai"
 AI_CONFIG_FILE="${AI_SCRIPTS_DIR}/config.yaml"
 
@@ -704,7 +704,7 @@ start_ai_cron() {
   interval="$(opt '.ai_poll_interval // 5')"
 
   # Cron-Datei schreiben
-  echo "*/${interval} * * * * root python3 ${AI_SCRIPTS_DIR}/poll_new_docs.py >> /var/log/paperless-ai.log 2>&1" \
+  echo "*/${interval} * * * * root python3 ${AI_SCRIPTS_DIR}/poll_new_docs.py >> /data/paperless-ai.log 2>&1" \
     > /etc/cron.d/paperless-ai
   chmod 644 /etc/cron.d/paperless-ai
 
