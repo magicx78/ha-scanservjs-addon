@@ -1,4 +1,24 @@
 configuration:
+  # --- AI / Claude ---
+  anthropic_api_key:
+    name: Anthropic API Key
+    description: Your Claude API key from console.anthropic.com. Required for AI document classification.
+  paperless_url:
+    name: Paperless-ngx URL
+    description: Internal URL of your Paperless-ngx instance, e.g. http://ca5234a0-paperless-ngx:8000.
+  paperless_token:
+    name: Paperless-ngx API Token
+    description: API token from your Paperless-ngx profile (Settings → API Token).
+  ha_notify_target:
+    name: HA Notification Target
+    description: Home Assistant notification service used for AI classification results, e.g. notify.persistent_notification.
+  min_konfidenz:
+    name: Minimum Confidence
+    description: Minimum confidence score (0.0–1.0) required before applying an AI classification. Default is 0.7.
+  ai_poll_interval:
+    name: AI Poll Interval (seconds)
+    description: How often the AI worker checks for new unclassified documents in Paperless-ngx. Default is 5 seconds.
+  # --- Scanner ---
   saned_net_hosts:
     name: SANE network hosts
     description: Semicolon-separated hosts appended to /etc/sane.d/net.conf.
