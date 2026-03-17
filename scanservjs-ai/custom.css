@@ -1,218 +1,558 @@
-/* Claude-inspired Theme für scanservjs */
+/* ═══════════════════════════════════════════════════════════════
+   Claude.ai Layout Theme für scanservjs
+   Orientiert an claude.ai — dunkle Sidebar, warme Content-Area,
+   Orange-Akzente, Clean Typography
+   ═══════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-  --claude-bg:          #faf9f6;
-  --claude-surface:     #fffefb;
-  --claude-orange:      #d97757;
-  --claude-orange-dark: #c4623f;
-  --claude-brown:       #3d2b1f;
-  --claude-brown-light: #7a5c45;
-  --claude-border:      #e8e0d4;
-  --claude-shadow:      0 2px 12px rgba(61, 43, 31, 0.08);
-  --claude-radius:      12px;
-  --claude-font:        'Inter', 'Segoe UI', system-ui, sans-serif;
+  /* Farben aus claude.ai */
+  --c-bg:           #f5f0e8;
+  --c-bg-alt:       #faf9f6;
+  --c-surface:      #ffffff;
+  --c-sidebar:      #1c1917;
+  --c-sidebar-item: rgba(255,255,255,0.06);
+  --c-sidebar-hover:rgba(255,255,255,0.10);
+  --c-sidebar-text: rgba(255,255,255,0.85);
+  --c-sidebar-muted:rgba(255,255,255,0.45);
+
+  --c-orange:       #d97757;
+  --c-orange-dark:  #c4623f;
+  --c-orange-glow:  rgba(217,119,87,0.18);
+  --c-brown:        #1c1917;
+  --c-brown-mid:    #44403c;
+  --c-brown-light:  #78716c;
+  --c-border:       #e7e0d6;
+  --c-border-light: #f0ebe4;
+
+  --c-shadow-sm:    0 1px 4px rgba(28,25,23,0.06);
+  --c-shadow-md:    0 4px 16px rgba(28,25,23,0.10);
+  --c-shadow-lg:    0 8px 32px rgba(28,25,23,0.14);
+  --c-radius:       10px;
+  --c-radius-lg:    16px;
+  --c-font:         'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
-/* ─── Hintergrund & Basis ─────────────────────────────────── */
+/* ─── Reset & Basis ────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 body,
 .v-application,
 .v-application--wrap {
-  background-color: var(--claude-bg) !important;
-  font-family: var(--claude-font) !important;
-  color: var(--claude-brown) !important;
+  background-color: var(--c-bg) !important;
+  font-family: var(--c-font) !important;
+  color: var(--c-brown-mid) !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── App-Bar / Header ────────────────────────────────────── */
+/* ─── App-Bar: kompakt, clean ──────────────────────────────── */
 .v-app-bar,
 .v-toolbar,
 header.v-app-bar {
-  background: linear-gradient(135deg, #3d2b1f 0%, #5c3d28 100%) !important;
-  border-bottom: 2px solid var(--claude-orange) !important;
-  box-shadow: 0 2px 16px rgba(61, 43, 31, 0.25) !important;
+  background: var(--c-sidebar) !important;
+  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+  box-shadow: none !important;
+  height: 52px !important;
+  min-height: 52px !important;
 }
 
 .v-app-bar .v-toolbar__title,
 .v-toolbar__title {
-  color: #faf9f6 !important;
+  color: rgba(255,255,255,0.92) !important;
   font-weight: 600 !important;
-  letter-spacing: 0.02em;
+  font-size: 0.95rem !important;
+  letter-spacing: 0.01em;
 }
 
 .v-app-bar .v-icon,
 .v-toolbar .v-icon {
-  color: var(--claude-orange) !important;
+  color: var(--c-orange) !important;
 }
 
-/* ─── Navigation / Sidebar ────────────────────────────────── */
+/* Hamburger / Menu-Button */
+.v-app-bar .v-btn--icon .v-icon {
+  color: rgba(255,255,255,0.7) !important;
+}
+
+/* ─── Sidebar — dunkel wie claude.ai ──────────────────────── */
 .v-navigation-drawer {
-  background: var(--claude-surface) !important;
-  border-right: 1px solid var(--claude-border) !important;
-  box-shadow: var(--claude-shadow) !important;
+  background: var(--c-sidebar) !important;
+  border-right: none !important;
+  box-shadow: 2px 0 20px rgba(28,25,23,0.18) !important;
 }
 
-.v-list-item--active,
-.v-list-item:focus {
-  background: rgba(217, 119, 87, 0.12) !important;
-  border-left: 3px solid var(--claude-orange) !important;
+/* Sidebar-Titel / Header */
+.v-navigation-drawer .v-list-item__title {
+  color: var(--c-sidebar-text) !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
 }
 
-.v-list-item--active .v-icon {
-  color: var(--claude-orange) !important;
+.v-navigation-drawer .v-list-item__subtitle,
+.v-navigation-drawer .v-list-item__action-text {
+  color: var(--c-sidebar-muted) !important;
 }
 
-/* ─── Cards ───────────────────────────────────────────────── */
+.v-navigation-drawer .v-icon {
+  color: var(--c-sidebar-muted) !important;
+}
+
+/* Sidebar-Divider */
+.v-navigation-drawer .v-divider {
+  border-color: rgba(255,255,255,0.08) !important;
+}
+
+/* Sidebar Nav-Items */
+.v-navigation-drawer .v-list-item {
+  border-radius: 8px !important;
+  margin: 2px 8px !important;
+  transition: background 0.15s ease !important;
+}
+
+.v-navigation-drawer .v-list-item:not(.v-list-item--active):hover {
+  background: var(--c-sidebar-hover) !important;
+}
+
+/* Aktiver Sidebar-Eintrag */
+.v-navigation-drawer .v-list-item--active,
+.v-navigation-drawer .v-list-item:focus {
+  background: var(--c-orange-glow) !important;
+  border-left: none !important;
+}
+
+.v-navigation-drawer .v-list-item--active .v-list-item__title {
+  color: var(--c-orange) !important;
+  font-weight: 600 !important;
+}
+
+.v-navigation-drawer .v-list-item--active .v-icon {
+  color: var(--c-orange) !important;
+}
+
+/* Sidebar-Gruppen-Überschriften */
+.v-navigation-drawer .v-subheader {
+  color: var(--c-sidebar-muted) !important;
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  margin-top: 12px !important;
+}
+
+/* ─── Main Content Area ────────────────────────────────────── */
+.v-main,
+.v-main__wrap {
+  background: var(--c-bg) !important;
+}
+
+/* ─── Cards — claude.ai-Stil ───────────────────────────────── */
 .v-card {
-  background: var(--claude-surface) !important;
-  border: 1px solid var(--claude-border) !important;
-  border-radius: var(--claude-radius) !important;
-  box-shadow: var(--claude-shadow) !important;
+  background: var(--c-surface) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--c-radius-lg) !important;
+  box-shadow: var(--c-shadow-sm) !important;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+}
+
+.v-card:hover {
+  box-shadow: var(--c-shadow-md) !important;
+  border-color: #d6cdc2 !important;
 }
 
 .v-card__title {
-  color: var(--claude-brown) !important;
+  color: var(--c-brown) !important;
   font-weight: 600 !important;
-  font-size: 1.05rem !important;
-  border-bottom: 1px solid var(--claude-border);
-  padding-bottom: 12px !important;
+  font-size: 1rem !important;
+  letter-spacing: -0.01em !important;
+  padding: 20px 20px 12px !important;
+  border-bottom: 1px solid var(--c-border-light) !important;
 }
 
-/* ─── Primär-Buttons ──────────────────────────────────────── */
+.v-card__text {
+  color: var(--c-brown-mid) !important;
+  line-height: 1.6 !important;
+  padding: 16px 20px !important;
+}
+
+.v-card__actions {
+  padding: 12px 20px 20px !important;
+  gap: 8px !important;
+}
+
+/* ─── Primär-Button — claude.ai Send/Action Button ─────────── */
 .v-btn.v-btn--contained.primary,
 .v-btn.primary,
 .v-btn[class*="primary"] {
-  background: var(--claude-orange) !important;
-  background: linear-gradient(135deg, #d97757 0%, #c4623f 100%) !important;
+  background: var(--c-orange) !important;
+  background: linear-gradient(160deg, #e08865 0%, #c4623f 100%) !important;
   color: #fff !important;
   border-radius: 8px !important;
-  box-shadow: 0 2px 8px rgba(217, 119, 87, 0.35) !important;
+  box-shadow: 0 1px 3px rgba(196,98,63,0.3), 0 4px 12px rgba(196,98,63,0.2) !important;
   font-weight: 600 !important;
-  letter-spacing: 0.03em !important;
+  font-size: 0.875rem !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
+  padding: 0 20px !important;
   transition: all 0.2s ease !important;
+  border: none !important;
 }
 
 .v-btn.v-btn--contained.primary:hover,
 .v-btn.primary:hover {
-  background: linear-gradient(135deg, #c4623f 0%, #b05535 100%) !important;
-  box-shadow: 0 4px 16px rgba(217, 119, 87, 0.45) !important;
+  background: linear-gradient(160deg, #c4623f 0%, #a8522f 100%) !important;
+  box-shadow: 0 2px 6px rgba(196,98,63,0.4), 0 8px 24px rgba(196,98,63,0.25) !important;
   transform: translateY(-1px) !important;
 }
 
-/* ─── Sekundär-Buttons ────────────────────────────────────── */
-.v-btn:not(.primary):not(.v-btn--icon) {
+.v-btn.v-btn--contained.primary:active,
+.v-btn.primary:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 1px 3px rgba(196,98,63,0.3) !important;
+}
+
+/* ─── Sekundär-Buttons ─────────────────────────────────────── */
+.v-btn:not(.primary):not(.v-btn--icon):not(.v-btn--fab) {
   border-radius: 8px !important;
   font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  text-transform: none !important;
+  letter-spacing: 0.01em !important;
+  border-color: var(--c-border) !important;
+  color: var(--c-brown-mid) !important;
+  background: var(--c-surface) !important;
+  box-shadow: var(--c-shadow-sm) !important;
+  transition: all 0.15s ease !important;
 }
 
-/* ─── Scan-Button (Haupt-CTA) ─────────────────────────────── */
-.v-btn.v-size--x-large,
-.v-btn--fab {
-  background: var(--claude-orange) !important;
+.v-btn:not(.primary):not(.v-btn--icon):not(.v-btn--fab):hover {
+  background: var(--c-bg-alt) !important;
+  border-color: #c8bcb0 !important;
+}
+
+/* ─── Scan-Button (Haupt-CTA / FAB) ────────────────────────── */
+.v-btn.v-size--x-large {
+  background: linear-gradient(160deg, #e08865 0%, #c4623f 100%) !important;
   color: #fff !important;
+  border-radius: 10px !important;
+  box-shadow: 0 2px 8px rgba(196,98,63,0.35), 0 8px 24px rgba(196,98,63,0.2) !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
 }
 
-/* ─── Formular-Felder ─────────────────────────────────────── */
+.v-btn--fab {
+  background: var(--c-orange) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 16px rgba(196,98,63,0.4) !important;
+}
+
+/* ─── Icon-Buttons ─────────────────────────────────────────── */
+.v-btn--icon .v-icon {
+  color: var(--c-brown-light) !important;
+  transition: color 0.15s ease !important;
+}
+
+.v-btn--icon:hover .v-icon {
+  color: var(--c-orange) !important;
+}
+
+/* ─── Formular-Felder — claude.ai Input-Stil ───────────────── */
 .v-text-field .v-input__slot,
 .v-select .v-input__slot {
-  background: var(--claude-surface) !important;
-  border-radius: 8px !important;
+  background: var(--c-surface) !important;
+  border-radius: 10px !important;
+  transition: all 0.15s ease !important;
 }
 
 .v-text-field--outlined fieldset,
 .v-select--outlined fieldset {
-  border-color: var(--claude-border) !important;
+  border-color: var(--c-border) !important;
+  border-width: 1.5px !important;
+  transition: border-color 0.15s ease !important;
 }
 
-.v-text-field--outlined:hover fieldset,
-.v-select--outlined:hover fieldset {
-  border-color: var(--claude-orange) !important;
+.v-text-field--outlined:hover:not(.v-input--is-focused) fieldset,
+.v-select--outlined:hover:not(.v-input--is-focused) fieldset {
+  border-color: #c8bcb0 !important;
 }
 
 .v-text-field--outlined.v-input--is-focused fieldset,
 .v-select--outlined.v-input--is-focused fieldset {
-  border-color: var(--claude-orange) !important;
+  border-color: var(--c-orange) !important;
   border-width: 2px !important;
+  box-shadow: 0 0 0 3px var(--c-orange-glow) !important;
 }
 
 .v-label {
-  color: var(--claude-brown-light) !important;
-}
-
-/* ─── Slider / Range ──────────────────────────────────────── */
-.v-slider__thumb,
-.v-slider__track-fill {
-  background: var(--claude-orange) !important;
-  color: var(--claude-orange) !important;
-}
-
-/* ─── Chips / Tags ────────────────────────────────────────── */
-.v-chip {
-  background: rgba(217, 119, 87, 0.12) !important;
-  color: var(--claude-orange-dark) !important;
-  border: 1px solid rgba(217, 119, 87, 0.3) !important;
+  color: var(--c-brown-light) !important;
+  font-size: 0.875rem !important;
   font-weight: 500 !important;
 }
 
-/* ─── Progress / Loading ──────────────────────────────────── */
-.v-progress-linear__determinate,
-.v-progress-linear__indeterminate {
-  background: var(--claude-orange) !important;
+.v-input input,
+.v-input textarea {
+  color: var(--c-brown) !important;
+  font-family: var(--c-font) !important;
+  font-size: 0.9rem !important;
 }
 
-.v-progress-circular svg circle {
-  stroke: var(--claude-orange) !important;
+/* ─── Select Dropdown ──────────────────────────────────────── */
+.v-select__selection {
+  color: var(--c-brown-mid) !important;
+  font-size: 0.9rem !important;
 }
 
-/* ─── Snackbar / Alerts ───────────────────────────────────── */
-.v-snack__wrapper {
-  background: var(--claude-brown) !important;
-  border-left: 4px solid var(--claude-orange) !important;
-  border-radius: 8px !important;
-}
-
-/* ─── Select-Dropdown ─────────────────────────────────────── */
 .v-menu__content {
-  border-radius: 10px !important;
-  border: 1px solid var(--claude-border) !important;
-  box-shadow: 0 8px 32px rgba(61, 43, 31, 0.12) !important;
+  border-radius: var(--c-radius-lg) !important;
+  border: 1px solid var(--c-border) !important;
+  box-shadow: var(--c-shadow-lg) !important;
+  background: var(--c-surface) !important;
+  overflow: hidden !important;
+}
+
+.v-list {
+  background: var(--c-surface) !important;
+  padding: 6px !important;
+}
+
+.v-list-item {
+  border-radius: 6px !important;
+  min-height: 38px !important;
+  margin: 1px 0 !important;
+  transition: background 0.1s ease !important;
 }
 
 .v-list-item:hover {
-  background: rgba(217, 119, 87, 0.08) !important;
+  background: var(--c-bg) !important;
 }
 
-/* ─── Scrollbar ───────────────────────────────────────────── */
-::-webkit-scrollbar        { width: 6px; }
-::-webkit-scrollbar-track  { background: var(--claude-bg); }
-::-webkit-scrollbar-thumb  { background: var(--claude-border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--claude-orange); }
+.v-list-item--active:not(.v-navigation-drawer .v-list-item--active) {
+  background: var(--c-orange-glow) !important;
+  color: var(--c-orange-dark) !important;
+}
 
-/* ─── Preview-Bereich ─────────────────────────────────────── */
+/* ─── Slider / Range ───────────────────────────────────────── */
+.v-slider__thumb {
+  background: var(--c-orange) !important;
+  color: var(--c-orange) !important;
+  box-shadow: 0 0 0 3px var(--c-orange-glow) !important;
+}
+
+.v-slider__track-fill {
+  background: var(--c-orange) !important;
+}
+
+.v-slider__track-background {
+  background: var(--c-border) !important;
+}
+
+/* ─── Chips / Tags ─────────────────────────────────────────── */
+.v-chip {
+  background: var(--c-bg) !important;
+  color: var(--c-brown-mid) !important;
+  border: 1px solid var(--c-border) !important;
+  font-weight: 500 !important;
+  font-size: 0.8rem !important;
+  border-radius: 6px !important;
+  height: 26px !important;
+}
+
+.v-chip.v-chip--outlined {
+  border-color: var(--c-orange) !important;
+  color: var(--c-orange-dark) !important;
+  background: var(--c-orange-glow) !important;
+}
+
+/* ─── Progress / Loading ───────────────────────────────────── */
+.v-progress-linear {
+  border-radius: 99px !important;
+  overflow: hidden !important;
+}
+
+.v-progress-linear__determinate,
+.v-progress-linear__indeterminate--active .v-progress-linear__indeterminate {
+  background: linear-gradient(90deg, var(--c-orange), #e08865) !important;
+}
+
+.v-progress-linear__background {
+  background: var(--c-border) !important;
+}
+
+.v-progress-circular svg circle {
+  stroke: var(--c-orange) !important;
+}
+
+/* ─── Snackbar / Benachrichtigungen ────────────────────────── */
+.v-snack__wrapper {
+  background: var(--c-brown) !important;
+  border-left: 3px solid var(--c-orange) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--c-shadow-lg) !important;
+  color: rgba(255,255,255,0.92) !important;
+}
+
+.v-snack__content {
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+}
+
+/* ─── Divider ──────────────────────────────────────────────── */
+.v-divider {
+  border-color: var(--c-border-light) !important;
+}
+
+/* ─── Tabs ─────────────────────────────────────────────────── */
+.v-tabs-bar {
+  background: transparent !important;
+}
+
+.v-tab {
+  font-family: var(--c-font) !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  text-transform: none !important;
+  letter-spacing: 0.01em !important;
+  color: var(--c-brown-light) !important;
+  min-width: 80px !important;
+}
+
+.v-tab--active {
+  color: var(--c-orange) !important;
+  font-weight: 600 !important;
+}
+
+.v-tabs-slider {
+  background: var(--c-orange) !important;
+  height: 2px !important;
+  border-radius: 2px !important;
+}
+
+/* ─── Switch / Toggle ──────────────────────────────────────── */
+.v-input--switch .v-input--switch__track {
+  color: var(--c-border) !important;
+  opacity: 1 !important;
+}
+
+.v-input--switch.v-input--is-dirty .v-input--switch__track {
+  color: var(--c-orange) !important;
+  opacity: 0.5 !important;
+}
+
+.v-input--switch.v-input--is-dirty .v-input--switch__thumb {
+  color: var(--c-orange) !important;
+}
+
+/* ─── Checkbox & Radio ─────────────────────────────────────── */
+.v-icon.mdi-checkbox-marked,
+.v-icon.mdi-radiobox-marked {
+  color: var(--c-orange) !important;
+}
+
+/* ─── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar               { width: 5px; height: 5px; }
+::-webkit-scrollbar-track         { background: transparent; }
+::-webkit-scrollbar-thumb         { background: var(--c-border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover   { background: var(--c-orange); }
+::-webkit-scrollbar-corner        { background: transparent; }
+
+/* ─── Preview-Bereich ──────────────────────────────────────── */
 .scan-preview,
 .preview-container,
 [class*="preview"] {
-  border: 2px solid var(--claude-border) !important;
-  border-radius: var(--claude-radius) !important;
-  background: var(--claude-surface) !important;
+  border: 1.5px solid var(--c-border) !important;
+  border-radius: var(--c-radius-lg) !important;
+  background: var(--c-surface) !important;
+  box-shadow: var(--c-shadow-sm) !important;
+  overflow: hidden !important;
 }
 
-/* ─── Divider ─────────────────────────────────────────────── */
-.v-divider {
-  border-color: var(--claude-border) !important;
+/* ─── Data Tables ──────────────────────────────────────────── */
+.v-data-table {
+  background: var(--c-surface) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--c-radius-lg) !important;
+  overflow: hidden !important;
 }
 
-/* ─── Tabs ────────────────────────────────────────────────── */
-.v-tab--active {
-  color: var(--claude-orange) !important;
-}
-.v-tabs-slider {
-  background: var(--claude-orange) !important;
-  color: var(--claude-orange) !important;
+.v-data-table thead tr th {
+  background: var(--c-bg) !important;
+  color: var(--c-brown-light) !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  border-bottom: 1px solid var(--c-border) !important;
 }
 
-/* ─── Switch / Toggle ─────────────────────────────────────── */
-.v-input--switch .v-input--switch__track {
-  color: var(--claude-orange) !important;
+.v-data-table tbody tr:hover {
+  background: var(--c-bg) !important;
 }
-.v-input--switch.v-input--is-dirty .v-input--switch__thumb {
-  color: var(--claude-orange) !important;
+
+.v-data-table tbody tr td {
+  color: var(--c-brown-mid) !important;
+  font-size: 0.875rem !important;
+  border-bottom: 1px solid var(--c-border-light) !important;
+}
+
+/* ─── Expansion Panels ─────────────────────────────────────── */
+.v-expansion-panel {
+  background: var(--c-surface) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--c-radius) !important;
+  margin-bottom: 8px !important;
+}
+
+.v-expansion-panel-header {
+  font-weight: 600 !important;
+  font-size: 0.9rem !important;
+  color: var(--c-brown) !important;
+}
+
+.v-expansion-panel-header .v-icon {
+  color: var(--c-brown-light) !important;
+}
+
+/* ─── Tooltips ─────────────────────────────────────────────── */
+.v-tooltip__content {
+  background: var(--c-brown) !important;
+  border-radius: 6px !important;
+  font-family: var(--c-font) !important;
+  font-size: 0.8rem !important;
+  padding: 5px 10px !important;
+}
+
+/* ─── Breadcrumbs ──────────────────────────────────────────── */
+.v-breadcrumbs li a {
+  color: var(--c-orange) !important;
+  font-weight: 500 !important;
+}
+
+.v-breadcrumbs li:last-child .v-breadcrumbs__item {
+  color: var(--c-brown-mid) !important;
+  font-weight: 600 !important;
+}
+
+/* ─── Subheadings / Labels ─────────────────────────────────── */
+.v-subheader {
+  color: var(--c-brown-light) !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.07em !important;
+  text-transform: uppercase !important;
+}
+
+/* ─── Content-Spacing ──────────────────────────────────────── */
+.v-container {
+  padding: 20px !important;
+}
+
+.v-row {
+  margin: 0 -10px !important;
+}
+
+.v-col {
+  padding: 10px !important;
 }
