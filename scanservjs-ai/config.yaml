@@ -13,7 +13,7 @@ boot: auto
 
 ingress: true
 ingress_port: 8181
-panel_icon: "mdi:scanner"
+panel_icon: "mdi:robot"
 panel_title: "scanservjs KI"
 host_network: true
 
