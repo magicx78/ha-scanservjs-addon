@@ -1,7 +1,7 @@
 # Paperless-AI – Python-Abhaengigkeiten
 # Installation: pip install -r requirements.txt
 
-anthropic>=0.40.0
+anthropic>=0.44.0
 requests>=2.31.0
 pdfminer.six>=20221105
 pyyaml>=6.0

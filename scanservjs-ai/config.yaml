@@ -1,7 +1,7 @@
 name: "scanservjs + KI (Paperless-AI)"
-version: "1.2.0"
+version: "1.2.2"
 slug: "scanservjs_ai"
-description: "scanservjs Scanner Web-UI mit automatischer KI-Klassifikation via Claude API (Paperless-ngx Integration)."
+description: "Scanner Web-UI mit automatischer KI-Dokumentenklassifikation. Scans landen direkt in Paperless-ngx – Titel, Tags und Korrespondenten werden automatisch per Claude AI vergeben."
 url: "https://github.com/magicx78/ha-scanservjs-addon"
 
 arch:
@@ -12,15 +12,15 @@ startup: services
 boot: auto
 
 ingress: true
-ingress_port: 8080
+ingress_port: 8181
 panel_icon: "mdi:scanner"
 panel_title: "scanservjs KI"
 host_network: true
 
 ports:
-  8080/tcp: 8080
+  8181/tcp: 8181
 ports_description:
-  8080/tcp: "scanservjs Web interface"
+  8181/tcp: "scanservjs KI Web interface"
 
 icon: icon.png
 logo: icon.png
@@ -84,9 +84,9 @@ options:
 
 schema:
   # --- KI / Claude API -------------------------------------------
-  anthropic_api_key: str
-  paperless_url: str
-  paperless_token: str
+  anthropic_api_key: str?
+  paperless_url: str?
+  paperless_token: str?
   ha_notify_target: str?
   min_konfidenz: float?
   ai_poll_interval: int?

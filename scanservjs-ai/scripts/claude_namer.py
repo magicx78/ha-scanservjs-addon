@@ -5,7 +5,7 @@ Zwei separate API-Calls:
   1. Tags-Kontext  : extrahiert Tags, Person, Firma, Konfidenz
   2. Dateinamen-Kontext: extrahiert Datum, Kategorie, Beschreibung
 
-Modell  : claude-haiku-4-5
+Modell  : claude-haiku-4-5-20251001
 Timeout : 30 s
 Retries : 1 Retry mit vereinfachtem Prompt bei ungueltiger JSON-Antwort
 """
@@ -14,6 +14,7 @@ import json
 import logging
 import re
 import time
+from typing import Optional
 
 import anthropic
 
@@ -139,7 +140,7 @@ class ClaudeNamer:
         self._normalize(result)
         return result
 
-    def _call_with_retry(self, ocr_text: str, system_prompt: str, required_fields: list, context: str) -> dict | None:
+    def _call_with_retry(self, ocr_text: str, system_prompt: str, required_fields: list, context: str) -> Optional[dict]:
         """Fuehrt einen API-Call mit einem Retry durch."""
         for attempt in range(1, 3):
             try:
@@ -164,7 +165,7 @@ class ClaudeNamer:
     def _call_claude(self, ocr_text: str, system_prompt: str) -> dict:
         """Fuehrt einen einzelnen API-Call durch und gibt das geparste Ergebnis zurueck."""
         message = self.client.messages.create(
-            model="claude-haiku-4-5",
+            model="claude-haiku-4-5-20251001",
             max_tokens=512,
             timeout=30.0,
             system=system_prompt,

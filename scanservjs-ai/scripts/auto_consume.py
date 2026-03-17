@@ -79,7 +79,7 @@ def setup_logging(log_level: str) -> logging.Logger:
 
     # Rolling-Logfile (5 MB, 3 Backups)
     file_handler = logging.handlers.RotatingFileHandler(
-        SCRIPT_DIR / "auto_consume.log",
+        Path("/data/auto_consume.log"),
         maxBytes=5 * 1024 * 1024,
         backupCount=3,
         encoding="utf-8",
@@ -161,7 +161,7 @@ def main() -> None:
     paperless = PaperlessAPI(config, logger)
     namer = ClaudeNamer(config, logger)
     notifier = HANotifier(config, logger)
-    checker = DuplicateChecker(SCRIPT_DIR / "document_hashes.db", logger)
+    checker = DuplicateChecker(Path("/data/document_hashes.db"), logger)
 
     try:
         # --- 1. Duplikat-Erkennung ---
