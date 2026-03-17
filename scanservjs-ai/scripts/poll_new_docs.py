@@ -97,8 +97,15 @@ def _get_ki_tag_id(session: requests.Session, base: str) -> Optional[int]:
 
 def _run() -> None:
     config = load_config()
-    base = config["paperless_url"].rstrip("/")
-    token = config["paperless_token"]
+    base = (config.get("paperless_url") or "").rstrip("/")
+    token = config.get("paperless_token") or ""
+
+    if not base or not token:
+        print(
+            "[poll] paperless_url oder paperless_token fehlt in config.yaml – Abbruch.",
+            file=sys.stderr,
+        )
+        return
 
     session = requests.Session()
     session.headers["Authorization"] = f"Token {token}"
@@ -107,12 +114,16 @@ def _run() -> None:
     ki_tag_id = _get_ki_tag_id(session, base)
 
     # Dokumente ohne document_type = noch nicht verarbeitet
-    resp = session.get(
-        f"{base}/api/documents/",
-        params={"document_type__isnull": "true", "ordering": "added", "page_size": 50},
-        timeout=15,
-    )
-    resp.raise_for_status()
+    try:
+        resp = session.get(
+            f"{base}/api/documents/",
+            params={"document_type__isnull": "true", "ordering": "added", "page_size": 50},
+            timeout=15,
+        )
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        print(f"[poll] Paperless-ngx nicht erreichbar: {exc}", file=sys.stderr)
+        return
     all_docs = resp.json().get("results") or []
 
     # Bereits KI-verarbeitete Dokumente herausfiltern
