@@ -1,6 +1,7 @@
 # ============================================================
-# Paperless-AI Consumption Script – Konfiguration
-# Datei ablegen unter: /config/scripts/config.yaml
+# Paperless-AI Consumption Script – Konfiguration (BEISPIEL)
+# Kopieren und umbenennen: cp config.example.yaml config.yaml
+# Niemals config.yaml commiten! (liegt in .gitignore)
 # ============================================================
 
 # --- Paperless-ngx ------------------------------------------
@@ -8,7 +9,7 @@
 paperless_url: "http://ca5234a0-paperless-ngx:8000"
 
 # API-Token: Paperless -> Einstellungen -> API-Token generieren
-paperless_token: "94022d2f817e6733181aae49f516f13793be164b"
+paperless_token: "DEIN_PAPERLESS_API_TOKEN"
 
 # --- Anthropic / Claude API ---------------------------------
 # API-Key von https://console.anthropic.com
