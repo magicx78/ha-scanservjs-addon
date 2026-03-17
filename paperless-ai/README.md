@@ -54,17 +54,43 @@ pip install -r /config/scripts/requirements.txt
 | `ha_token` | HA -> Profil -> Sicherheit -> Token erstellen |
 | `ha_notify_target` | z.B. `notify.mobile_app_iphone` |
 
-### 4. Post-Consume-Script in Paperless aktivieren
+### 4. Cron-Polling einrichten (empfohlen für HA-Addon)
 
-Paperless-ngx Addon-Konfiguration (HA Add-on Config-Tab):
+Da `PAPERLESS_POST_CONSUME_SCRIPT` im HA-Addon-Betrieb nicht direkt konfigurierbar ist,
+wird stattdessen ein Cron-Job genutzt:
 
+```bash
+# Crontab im Paperless-Addon-Container:
+*/5 * * * * python3 /config/scripts/poll_new_docs.py >> /config/scripts/poll.log 2>&1
+```
+
+Das Script `poll_new_docs.py`:
+- Pollt alle 5 Minuten auf neue, unkategorisierte Dokumente
+- Zeigt eine Vorschau (Dokumente vorher/nachher)
+- Verhindert parallele Läufe via `fcntl.flock` (Process-Lock)
+- Filtert bereits mit `[KI-Verarbeitet]` getaggte Dokumente aus
+
+**Alternativ** als direkter Post-Consume-Hook (falls Paperless-Umgebungsvariablen verfügbar):
 ```
 PAPERLESS_POST_CONSUME_SCRIPT=/config/scripts/auto_consume.py
 ```
 
-Addon neu starten.
+### 5. Konfiguration via Umgebungsvariablen (Secrets-safe)
 
-### 5. Testen
+Statt Tokens direkt in `config.yaml` zu schreiben, können Umgebungsvariablen gesetzt werden:
+
+| Umgebungsvariable | config.yaml-Feld | Pflicht |
+|-------------------|-----------------|---------|
+| `PAPERLESS_URL` | `paperless_url` | ✅ |
+| `PAPERLESS_TOKEN` | `paperless_token` | ✅ |
+| `ANTHROPIC_API_KEY` | `anthropic_api_key` | ✅ |
+| `HA_URL` | `ha_url` | optional |
+| `HA_TOKEN` | `ha_token` | optional |
+| `HA_NOTIFY_TARGET` | `ha_notify_target` | optional |
+
+Umgebungsvariablen überschreiben immer die config.yaml-Werte.
+
+### 6. Testen
 
 Einen Scan einlegen oder eine PDF in den Consumption-Ordner legen.
 Innerhalb von ~60 s sollte das Dokument in Paperless umbenannt

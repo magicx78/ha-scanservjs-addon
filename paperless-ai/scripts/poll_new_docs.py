@@ -80,6 +80,20 @@ def main() -> None:
         lock_fh.close()
 
 
+def _get_ki_tag_id(session: requests.Session, base: str) -> int | None:
+    """Gibt die ID des Tags 'KI-Verarbeitet' zurück (None falls nicht vorhanden)."""
+    try:
+        resp = session.get(
+            f"{base}/api/tags/",
+            params={"name__iexact": "KI-Verarbeitet"},
+            timeout=10,
+        )
+        results = resp.json().get("results") or []
+        return int(results[0]["id"]) if results else None
+    except Exception:
+        return None
+
+
 def _run() -> None:
     config = load_config()
     base = config["paperless_url"].rstrip("/")
@@ -88,6 +102,9 @@ def _run() -> None:
     session = requests.Session()
     session.headers["Authorization"] = f"Token {token}"
 
+    # ID des KI-Verarbeitet-Tags ermitteln (zum Ausfiltern bereits verarbeiteter Dokumente)
+    ki_tag_id = _get_ki_tag_id(session, base)
+
     # Dokumente ohne document_type = noch nicht verarbeitet
     resp = session.get(
         f"{base}/api/documents/",
@@ -95,7 +112,16 @@ def _run() -> None:
         timeout=15,
     )
     resp.raise_for_status()
-    docs = resp.json().get("results") or []
+    all_docs = resp.json().get("results") or []
+
+    # Bereits KI-verarbeitete Dokumente herausfiltern
+    if ki_tag_id is not None:
+        docs = [d for d in all_docs if ki_tag_id not in (d.get("tags") or [])]
+        skipped = len(all_docs) - len(docs)
+        if skipped:
+            print(f"  {skipped} Dokument(e) bereits KI-verarbeitet – übersprungen.")
+    else:
+        docs = all_docs
 
     if not docs:
         print("Keine neuen Dokumente zur Verarbeitung.")
