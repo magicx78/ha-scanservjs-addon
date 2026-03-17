@@ -139,7 +139,10 @@ def main() -> None:
                 notifier.notify_duplicate(doc_filename, original)
                 return
         else:
-            logger.warning(f"Quelldatei nicht erreichbar: {doc_source!r}")
+            if doc_source:
+                logger.warning(f"Quelldatei nicht erreichbar: {doc_source!r}")
+            else:
+                logger.debug("Kein DOCUMENT_SOURCE_PATH gesetzt (Polling-Modus)")
 
         # --- 2. OCR-Text holen ---
         ocr_text = paperless.get_document_content(doc_id)
