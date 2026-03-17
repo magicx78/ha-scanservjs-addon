@@ -1,113 +1,107 @@
-# PROGRESS.md – scanservjs-ai Addon Diagnose
+# PROGRESS.md – scanservjs-ai Addon
 
-**Branch:** `claude/integrate-paperless-ai-gxaos`
-**Stand:** 2026-03-17
-**Status:** 🟡 Alle Bugs gefixt – bereit für HA Supervisor Test
-
----
-
-## Diagnose: Warum startet das Addon nicht?
-
-### 🔴 BUG 1 – KRITISCH: Falsches Claude-Modell-ID (API-Fehler beim ersten Scan)
-
-**Datei:** `scanservjs-ai/scripts/claude_namer.py`
-**Problem:** Das Modell `claude-haiku-4-5` existiert nicht. Die korrekte Model-ID lautet `claude-haiku-4-5-20251001`.
-**Auswirkung:** Jeder API-Call an Claude schlägt mit `model_not_found` fehl → KI-Klassifikation crasht.
+**Branch:** `main`
+**Stand:** 2026-03-17 | **Runtime-Revision:** 2026-03-17-r31
+**Addon-Version:** 1.2.3
 
 ---
 
-### 🔴 BUG 2 – KRITISCH: Config-Schema blockiert Addon-Start ohne API-Key
+## Aktueller Status
 
-**Datei:** `scanservjs-ai/config.yaml`, Abschnitt `schema:`
-**Problem:** Beide Felder sind als `str` (Pflichtfeld, nicht-optional) deklariert:
-```yaml
-schema:
-  anthropic_api_key: str    # FEHLER: sollte str? sein
-  paperless_token: str      # FEHLER: sollte str? sein
+### ✅ Alle Code-Fixes committed (v1.2.3 auf `main`)
+
+| # | Fix | Datei |
+|---|-----|-------|
+| 1 | Falsches Modell `claude-haiku-4-5` → `claude-haiku-4-5-20251001` | `scripts/claude_namer.py` |
+| 2 | Schema `str` → `str?` (optionale Felder) | `config.yaml` |
+| 3 | `int\|None` → `Optional[int]` (Python 3.9 compat) | `scripts/poll_new_docs.py` |
+| 4 | PEP 668 pip geblockt → `python3 -m venv /opt/venv` | `Dockerfile` |
+| 5 | Logs/DB in read-only `/opt/` → `/data/` | `auto_consume.py`, `run.sh` |
+| 6 | `config["key"]` KeyError → `.get("key")` | `poll_new_docs.py` |
+| 7 | Port 8181 → 8080 | `config.yaml`, `Dockerfile` |
+| 8 | Echter Token aus Git entfernt | `paperless-ai/scripts/config.yaml` |
+| 9 | `config.example.yaml` → `config.yaml.example` | HA-Warning behoben |
+| 10 | Claude-inspired CSS Theme + Dockerfile-Injection | `custom.css`, `Dockerfile` |
+| 11 | Cron nutzt `/opt/venv/bin/python3` explizit | `run.sh` |
+
+---
+
+## 🔴 AKTIVER BLOCKER: Docker Build-Cache auf HA-Host
+
+### Symptom (aus Supervisor-Logs)
 ```
-Die `options`-Defaults sind leere Strings `""`. HA Supervisor lehnt leere Pflichtfelder bei einigen Versionen ab.
-**Auswirkung:** Das Addon kann nicht ohne eingetragenen API-Key starten.
-**Fix:** `str` → `str?` (optionales Feld)
-
----
-
-### 🟠 BUG 3 – HOCH: Python `int | None` Union-Syntax (Python 3.10+ erforderlich)
-
-**Datei:** `scanservjs-ai/scripts/poll_new_docs.py`, Zeile ~89
-**Problem:**
-```python
-def _get_ki_tag_id(...) -> int | None:  # Requires Python 3.10+
+#6 [ 2/10] RUN apt-get update ... python3 python3-pip cron ...
+#6 CACHED   ← ALTE LAYER ohne python3-venv !!!
+#9 [ 5/10] RUN pip3 install --no-cache-dir ...
+#9 ERROR: externally-managed-environment   ← PEP 668
+io.hass.version=1.2.0   ← HA liest alten config.yaml aus Cache
 ```
-Das `sbs20/scanservjs:v3.0.3` Basis-Image enthält möglicherweise Python 3.9.
-**Auswirkung:** `SyntaxError` beim Import → Cron-Job startet nicht.
-**Fix:** `int | None` → `Optional[int]` (mit `from typing import Optional`)
 
----
+### Ursache
+HA baut noch immer **v1.2.0** mit **altem Dockerfile** (ohne `python3-venv`).
+Docker-Layer-Cache auf dem HA-Host ignoriert neue Git-Commits.
 
-### 🟠 BUG 4 – HOCH: `pip install --break-system-packages` kann fehlschlagen
-
-**Datei:** `scanservjs-ai/Dockerfile`
-**Problem:**
-```dockerfile
-RUN pip3 install --no-cache-dir --break-system-packages -r /opt/paperless-ai/requirements.txt
-```
-Der `--break-system-packages`-Flag wurde mit PEP 668 in neueren Debian-/pip-Versionen eingeführt. Auf dem `sbs20/scanservjs:v3.0.3` Basis-Image (Node.js-fokussiert) ist das Verhalten unsicher.
-**Auswirkung:** Docker-Build schlägt fehl → Addon kann nicht gestartet werden.
-**Fix:** Entweder `--break-system-packages` entfernen oder `python3-venv` + venv nutzen.
-
----
-
-### 🟡 BUG 5 – MITTEL: Cron-Log-Verzeichnis möglicherweise nicht schreibbar
-
-**Datei:** `scanservjs-ai/run.sh`, Funktion `start_ai_cron()`
-**Problem:**
+### Lösung (USER ACTION REQUIRED)
 ```bash
-echo "*/5 * * * * root python3 /opt/paperless-ai/poll_new_docs.py >> /var/log/paperless-ai.log 2>&1"
+# 1. SSH in Home Assistant
+ssh root@homeassistant.local
+
+# 2. Docker-Cache komplett löschen
+docker builder prune --all --force
+
+# 3. In HA UI:
+#    Settings → Add-ons → scanservjs KI → Uninstall
+#    → Repository neu hinzufügen → Addon neu installieren
 ```
-Das Verzeichnis `/var/log/` existiert im Container, ist aber möglicherweise nicht schreibbar oder wird beim Neustart geleert.
-**Fix:** Log nach `/data/paperless-ai.log` oder `/tmp/paperless-ai.log` umleiten (persistent: `/data/`).
+
+### Erfolgskriterien nach Rebuild
+```
+io.hass.version=1.2.3           ← Neue Version
+#6 RUN apt-get ... python3-venv  ← Neue Layer, KEIN "CACHED"
+#9 RUN python3 -m venv           ← Venv wird erstellt
+Container startet ohne ERROR
+```
 
 ---
 
-### 🟡 BUG 6 – MITTEL: `auto_consume.py` schreibt Log in `/opt/paperless-ai/auto_consume.log`
+## 🟡 OFFEN: Scans landen nicht in Paperless-ngx
 
-**Datei:** `scanservjs-ai/scripts/auto_consume.py`
-**Problem:** Log-Datei wird in `SCRIPT_DIR / "auto_consume.log"` = `/opt/paperless-ai/auto_consume.log` geschrieben. Das Verzeichnis ist Read-Only im laufenden Container (COPY-Layer).
-**Fix:** Log-Pfad nach `/data/auto_consume.log` verschieben.
+**User bestätigt:** Scans erscheinen NICHT in Paperless.
+**Konfiguration:** `copy_scans_to_mode=custom`, Pfad `/share/paperless/consume`
 
----
-
-### 🟡 BUG 7 – MITTEL: `document_hashes.db` SQLite in `/opt/paperless-ai/` (nicht persistent)
-
-**Datei:** `scanservjs-ai/scripts/duplicate_check.py` (referenziert in `auto_consume.py`)
-**Problem:** Die SQLite-Datenbank für Duplikat-Erkennung liegt in `SCRIPT_DIR / "document_hashes.db"` = `/opt/paperless-ai/document_hashes.db`.
-**Auswirkung:** Bei Addon-Neustart geht die gesamte Hash-Datenbank verloren → keine Duplikat-Erkennung nach Restart.
-**Fix:** DB-Pfad nach `/data/document_hashes.db` verschieben.
+**Untersuchung steht aus** (erst nach BLOCKER 1 möglich):
+- Feuert `afterScan`-Hook in `config.local.js`?
+- Wird `/share/paperless/consume` korrekt gemountet?
+- Sieht Paperless-ngx Dateien in `consume`-Verzeichnis?
 
 ---
 
-## Zusammenfassung der Fixes
+## Datei-Übersicht
 
-| # | Priorität | Datei | Problem | Fix |
-|---|-----------|-------|---------|-----|
-| 1 | 🔴 KRITISCH | `scripts/claude_namer.py` | Falsches Modell-ID | `claude-haiku-4-5` → `claude-haiku-4-5-20251001` |
-| 2 | 🔴 KRITISCH | `config.yaml` schema | `str` statt `str?` | `anthropic_api_key: str?`, `paperless_token: str?` |
-| 3 | 🟠 HOCH | `scripts/poll_new_docs.py` | `int \| None` Syntax | `Optional[int]` aus `typing` |
-| 4 | 🟠 HOCH | `Dockerfile` | `--break-system-packages` | Flag entfernen oder venv nutzen |
-| 5 | 🟡 MITTEL | `run.sh` | Log in `/var/log/` | → `/data/paperless-ai.log` |
-| 6 | 🟡 MITTEL | `scripts/auto_consume.py` | Log in `/opt/` (read-only) | → `/data/auto_consume.log` |
-| 7 | 🟡 MITTEL | `scripts/duplicate_check.py` | DB in `/opt/` (nicht persistent) | → `/data/document_hashes.db` |
+```
+scanservjs-ai/
+├── Dockerfile              # v1.2.3: venv, custom.css injection, port 8080
+├── config.yaml             # v1.2.3, ingress_port 8080, alle schema str?
+├── run.sh                  # r31: write_ai_config, start_ai_cron, venv cron
+├── custom.css              # Claude-Theme (orange #d97757, brown #3d2b1f)
+├── config.local.js         # scanservjs config (afterScan → COPY_SCANS_TO)
+└── scripts/
+    ├── auto_consume.py     # KI-Pipeline: OCR → Claude → Paperless
+    ├── poll_new_docs.py    # Pollt Paperless alle 5min
+    ├── claude_namer.py     # Claude Haiku 4.5 API
+    ├── paperless_api.py    # Paperless REST API wrapper
+    ├── ha_notify.py        # HA Notifications
+    ├── duplicate_check.py  # MD5-Hash Duplikat-Erkennung (DB: /data/)
+    └── requirements.txt    # anthropic>=0.44.0, requests, pyyaml, etc.
+```
 
 ---
 
-## Status der Fixes
+## Nächste Schritte
 
-- [x] BUG 1 gefixt: `claude-haiku-4-5` → `claude-haiku-4-5-20251001`
-- [x] BUG 2 gefixt: Schema `str` → `str?` für API-Keys
-- [x] BUG 3 gefixt: `int | None` → `Optional[int]` (Python 3.9 compat)
-- [x] BUG 4 gefixt: Dockerfile pip mit `||`-Fallback
-- [x] BUG 5 gefixt: Cron-Log → `/data/paperless-ai.log`
-- [x] BUG 6 gefixt: auto_consume Log → `/data/auto_consume.log`
-- [x] BUG 7 gefixt: SQLite DB → `/data/document_hashes.db`
-- [x] Lokaler Python Smoke-Test: 9/9 bestanden (Docker nicht verfügbar in CI-Umgebung)
-- [ ] HA Supervisor Install-Test (auf echtem HAOS)
+1. **[USER]** `docker builder prune --all --force` auf HA-Host
+2. **[USER]** Addon in HA neu installieren
+3. **[VERIFY]** Build-Log: v1.2.3 ohne CACHED apt-get Layer
+4. **[VERIFY]** Test-Scan → `/share/paperless/consume` prüfen
+5. **[VERIFY]** `/data/paperless-ai.log` auf KI-Klassifikation prüfen
+6. **[VERIFY]** Claude-Theme im scanservjs UI sichtbar
