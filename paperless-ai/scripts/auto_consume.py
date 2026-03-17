@@ -92,7 +92,7 @@ def build_title(result: dict) -> str:
     parts = [datum, kategorie, beschreibung]
     if tag_str:
         parts.append(tag_str)
-    return "_".join(parts)
+    return "_".join(parts)[:128]
 
 
 # ---------------------------------------------------------------------------
