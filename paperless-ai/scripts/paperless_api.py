@@ -90,7 +90,8 @@ class PaperlessAPI:
             self.logger.info(f"Dokument {doc_id} aktualisiert | title={title!r}")
             return True
         except requests.RequestException as exc:
-            self.logger.error(f"Fehler beim Aktualisieren von Dokument {doc_id}: {exc}")
+            body = getattr(exc.response, "text", "") if hasattr(exc, "response") else ""
+            self.logger.error(f"Fehler beim Aktualisieren von Dokument {doc_id}: {exc} | Response: {body}")
             return False
 
     def add_tag(self, doc_id: str, tag_name: str) -> bool:
