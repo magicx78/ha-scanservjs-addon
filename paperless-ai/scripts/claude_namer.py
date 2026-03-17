@@ -160,7 +160,7 @@ class ClaudeNamer:
             user_content = ocr_text
 
         message = self.client.messages.create(
-            model="claude-sonnet-4-6",
+            model="claude-haiku-4-5",
             max_tokens=512,
             timeout=30.0,
             system=SYSTEM_PROMPT,
