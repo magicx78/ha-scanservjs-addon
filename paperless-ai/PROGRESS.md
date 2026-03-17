@@ -103,4 +103,10 @@ Secrets können per `config.yaml` **oder** Umgebungsvariable gesetzt werden:
 ## Git-Branch
 `claude/integrate-paperless-ai-gxaos`
 
-Letzter Commit: `fix: production hardening – secrets, process-lock, error-handling`
+Letzter Commit: `fix: add --break-system-packages to pip install for Python 3.11+ (PEP 668)`
+
+## Branch-Status (2026-03-17)
+- Branch: `claude/integrate-paperless-ai-gxaos`
+- Remote: `magicx78/ha-scanservjs-addon`
+- PR: https://github.com/magicx78/ha-scanservjs-addon/pulls
+- Alle Änderungen committed & gepusht ✅
