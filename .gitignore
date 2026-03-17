@@ -1,0 +1,14 @@
+# Secrets – niemals einchecken
+paperless-ai/scripts/.env
+paperless-ai/scripts/config.yaml
+
+# Laufzeit-Daten
+paperless-ai/scripts/*.log
+paperless-ai/scripts/*.db
+paperless-ai/scripts/poll_new_docs.lock
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/

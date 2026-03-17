@@ -29,10 +29,48 @@ from paperless_api import PaperlessAPI
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
+_REQUIRED_KEYS = [
+    "paperless_url",
+    "paperless_token",
+    "anthropic_api_key",
+]
+
+_ENV_OVERRIDES = {
+    "paperless_url":      "PAPERLESS_URL",
+    "paperless_token":    "PAPERLESS_TOKEN",
+    "anthropic_api_key":  "ANTHROPIC_API_KEY",
+    "ha_url":             "HA_URL",
+    "ha_token":           "HA_TOKEN",
+    "ha_notify_target":   "HA_NOTIFY_TARGET",
+}
+
+
 def load_config() -> dict:
     cfg_path = SCRIPT_DIR / "config.yaml"
-    with open(cfg_path, "r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
+    try:
+        with open(cfg_path, "r", encoding="utf-8") as fh:
+            cfg = yaml.safe_load(fh) or {}
+    except FileNotFoundError:
+        cfg = {}
+
+    # Umgebungsvariablen ueberschreiben YAML-Werte (secrets-safe)
+    for key, env_var in _ENV_OVERRIDES.items():
+        val = os.environ.get(env_var)
+        if val:
+            cfg[key] = val
+
+    # Pflichtfelder pruefen
+    missing = [k for k in _REQUIRED_KEYS if not cfg.get(k)]
+    if missing:
+        print(
+            f"[CRITICAL] Fehlende Pflicht-Konfiguration: {', '.join(missing)}\n"
+            f"  Setze in config.yaml oder als Umgebungsvariable "
+            f"({', '.join(_ENV_OVERRIDES[k] for k in missing)}).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return cfg
 
 
 def setup_logging(log_level: str) -> logging.Logger:
@@ -194,7 +232,10 @@ def main() -> None:
         if md5:
             checker.register_document(md5, doc_filename, doc_id)
 
-        # --- 7. Erfolgs-Benachrichtigung ---
+        # --- 7. KI-Verarbeitet-Marker setzen ---
+        paperless.add_tag(doc_id, "KI-Verarbeitet")
+
+        # --- 8. Erfolgs-Benachrichtigung ---
         notifier.notify_success(title, result.get("kategorie", "?"), konfidenz)
         logger.info(f"Dokument {doc_id} erfolgreich verarbeitet: {title}")
 

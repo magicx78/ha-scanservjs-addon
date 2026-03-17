@@ -6,6 +6,7 @@ und ruft auto_consume.py fuer jedes auf.
 Cron: */5 * * * * python3 /config/scripts/poll_new_docs.py
 """
 
+import fcntl
 import os
 import subprocess
 import sys
@@ -15,11 +16,25 @@ import requests
 import yaml
 
 SCRIPT_DIR = Path(__file__).parent
+LOCK_FILE = SCRIPT_DIR / "poll_new_docs.lock"
+
+_ENV_OVERRIDES = {
+    "paperless_url":   "PAPERLESS_URL",
+    "paperless_token": "PAPERLESS_TOKEN",
+}
 
 
 def load_config() -> dict:
-    with open(SCRIPT_DIR / "config.yaml", encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
+    try:
+        with open(SCRIPT_DIR / "config.yaml", encoding="utf-8") as fh:
+            cfg = yaml.safe_load(fh) or {}
+    except FileNotFoundError:
+        cfg = {}
+    for key, env_var in _ENV_OVERRIDES.items():
+        val = os.environ.get(env_var)
+        if val:
+            cfg[key] = val
+    return cfg
 
 
 def print_preview(docs: list, session: requests.Session, base: str) -> None:
@@ -49,6 +64,23 @@ def print_preview(docs: list, session: requests.Session, base: str) -> None:
 
 
 def main() -> None:
+    # Process-Lock verhindert parallele Cron-Laeufe
+    lock_fh = open(LOCK_FILE, "w")
+    try:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("poll_new_docs.py laeuft bereits – Abbruch.", file=sys.stderr)
+        lock_fh.close()
+        return
+
+    try:
+        _run()
+    finally:
+        fcntl.flock(lock_fh, fcntl.LOCK_UN)
+        lock_fh.close()
+
+
+def _run() -> None:
     config = load_config()
     base = config["paperless_url"].rstrip("/")
     token = config["paperless_token"]

@@ -41,7 +41,9 @@ class DuplicateChecker:
             self.logger.error(f"Konnte Hash-Datenbank nicht initialisieren: {exc}")
 
     def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
 
     # -----------------------------------------------------------------------
     # Oeffentliche API

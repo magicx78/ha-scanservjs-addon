@@ -39,7 +39,11 @@ class PaperlessAPI:
                 f"{self.api_base}/documents/{doc_id}/", timeout=15
             )
             resp.raise_for_status()
-            return resp.json().get("content") or ""
+            try:
+                return resp.json().get("content") or ""
+            except ValueError:
+                self.logger.error(f"Ungueltige JSON-Antwort fuer Dokument {doc_id}: {resp.text[:200]!r}")
+                return ""
         except requests.RequestException as exc:
             self.logger.error(f"Fehler beim Abrufen von Dokument {doc_id}: {exc}")
             return ""
@@ -101,7 +105,11 @@ class PaperlessAPI:
                 f"{self.api_base}/documents/{doc_id}/", timeout=15
             )
             resp.raise_for_status()
-            current_tags: list = resp.json().get("tags") or []
+            try:
+                current_tags: list = resp.json().get("tags") or []
+            except ValueError:
+                self.logger.error(f"Ungueltige JSON-Antwort beim Tag-Abruf fuer Dokument {doc_id}")
+                return False
 
             tag_id = self.get_or_create_tag(tag_name)
             if tag_id is None:
@@ -160,6 +168,9 @@ class PaperlessAPI:
             self.logger.info(f"Neues {resource[:-1]} angelegt: {name!r} (id={created_id})")
             return created_id
 
+        except ValueError:
+            self.logger.error(f"Ungueltige JSON-Antwort bei {resource}/{name!r}")
+            return None
         except requests.RequestException as exc:
             self.logger.error(
                 f"Fehler bei get_or_create {resource}/{name!r}: {exc}"
