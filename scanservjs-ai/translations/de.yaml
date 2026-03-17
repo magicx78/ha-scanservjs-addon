@@ -1,0 +1,100 @@
+configuration:
+  saned_net_hosts:
+    name: SANE-Netzwerk-Hosts
+    description: Per Semikolon getrennte Hosts, die an /etc/sane.d/net.conf angehaengt werden.
+  airscan_devices:
+    name: Airscan-Geraete
+    description: Per Semikolon getrennte Eintraege fuer /etc/sane.d/airscan.conf.
+  scanimage_list_ignore:
+    name: scanimage-Liste ignorieren
+    description: Aktiviert bei Bedarf die scanimage-Umgebungsoption zum Ignorieren der Geraeteliste.
+  devices:
+    name: Geraetefilter
+    description: Optionaler Scanner-Filter, der an scanservjs weitergereicht wird.
+  ocr_lang:
+    name: OCR-Sprachen
+    description: Tesseract-OCR-Sprachen, zum Beispiel deu+eng.
+  copy_scans_to_mode:
+    name: Zielverzeichnis-Modus
+    description: auto erkennt /share/paperless/consume, paperless erzwingt es, custom nutzt das Wunschverzeichnis.
+  copy_scans_to:
+    name: Wunschverzeichnis fuer Scans
+    description: Zielverzeichnis fuer fertige Scans bei custom oder als Fallback bei auto.
+  generic_scanner_ip:
+    name: Generische Scanner-IP (AirScan Fallback)
+    description: Optionale Scanner-IP fuer automatische eSCL/WSD-Eintraege, wenn airscan_devices leer ist. Geeignet fuer HP/Epson/Canon/Xerox MFP ohne Brother-Modus.
+  brother_enable:
+    name: Brother-Unterstuetzung aktivieren
+    description: Aktiviert die optionale Brother-brscan4-Logik.
+  brother_accept_eula:
+    name: Brother-EULA akzeptieren
+    description: Muss aktiviert sein, bevor proprietaere Brother-Treiber heruntergeladen oder installiert werden.
+  brother_driver_source:
+    name: Brother-Treiberquelle
+    description: Waehlt automatische Aufloesung, eine URL oder eine lokale Datei.
+  brother_driver_url:
+    name: Brother-Treiber-URL
+    description: Direkte URL zu einem Brother-brscan4-Debian-Paket.
+  brother_driver_sha256:
+    name: Brother-Treiber-SHA256
+    description: Optionaler SHA256-Pruefwert fuer das heruntergeladene Paket.
+  brother_driver_local_path:
+    name: Brother-Treiber lokaler Pfad
+    description: Lokaler Pfad zu einem Brother-brscan4-Debian-Paket, zum Beispiel unter /share.
+  brother_register_scanner:
+    name: Brother-Scanner registrieren
+    description: Fuehrt beim Start die brsaneconfig4-Registrierung aus.
+  brother_scanner_name:
+    name: Brother-Scannername
+    description: Registrierungsname fuer den Brother-Scanner.
+  brother_scanner_model:
+    name: Brother-Scannermodell
+    description: Brother-Modellbezeichnung fuer brsaneconfig4.
+  brother_scanner_ip:
+    name: Brother-Scanner-IP
+    description: IP-Adresse fuer die Brother-Netzwerkregistrierung.
+  brother_scanner_nodename:
+    name: Brother-Scanner-Nodename
+    description: Optionaler Nodename anstelle einer IP-Adresse.
+  brother_overwrite_existing:
+    name: Vorhandene Brother-Registrierung ueberschreiben
+    description: Entfernt einen vorhandenen Brother-Eintrag vor der Neuregistrierung.
+  brother_button_output_dir:
+    name: Brother-Button-Ausgabeverzeichnis
+    description: Optionales Verzeichnis fuer Brother-Button-Scans. Leer = scanservjs Datenordner (sichtbar unter Dateien-Tab).
+  brother_button_default_resolution:
+    name: Brother-Standardauflosung (DPI)
+    description: "Standard-DPI fuer Brother-Button-Scans, wenn im Brother-Profil keine Aufloesung gesetzt ist. Empfehlung fuer OCR: 300 (600 nur fuer sehr kleine Schrift)."
+  brother_button_scan_format:
+    name: Brother-Tasten Scanformat
+    description: Ausgabeformat fuer Brother Scan to File und Scan to Email, z.B. jpeg oder png. Fuer Paperless sind 300dpi und eher kompakte Formate sinnvoll.
+  brother_image_output_format:
+    name: Brother Image-Ausgabeformat
+    description: Ausgabeformat fuer Brother Scan to Image (native, jpg, pdf, tiff).
+  brother_ocr_output_format:
+    name: Brother OCR-Ausgabeformat
+    description: Ausgabeformat fuer Brother Scan to OCR (native, jpg, pdf, tiff).
+  brother_copy_file_to_target:
+    name: File nach Ziel kopieren
+    description: true = Scan to File wird nach copy_scans_to kopiert (z.B. Paperless).
+  brother_copy_email_to_target:
+    name: Email nach Ziel kopieren
+    description: true = Scan to Email wird nach copy_scans_to kopiert.
+  brother_copy_image_to_target:
+    name: Image nach Ziel kopieren
+    description: false = Image bleibt im scanservjs Dateien-Tab; true = auch nach copy_scans_to kopieren.
+  brother_copy_ocr_to_target:
+    name: OCR nach Ziel kopieren
+    description: false = OCR bleibt im scanservjs Dateien-Tab; true = auch nach copy_scans_to kopieren.
+  brother_button_scan_args_file:
+    name: Brother-Datei-Taste Scanargumente
+    description: Optionale zusaetzliche scanimage-Argumente fuer Scan to File, durch Leerzeichen getrennt.
+  brother_button_scan_args_email:
+    name: Brother-E-Mail-Taste Scanargumente
+    description: Optionale zusaetzliche scanimage-Argumente fuer Scan to Email, durch Leerzeichen getrennt.
+  brother_trigger_image_webhook_id:
+    name: Brother-Image-Webhook-ID
+    description: Optionale Home-Assistant-Webhook-ID fuer die Brother-Taste Scan to Image.
+  brother_trigger_ocr_webhook_id:
+    name: Brother-OCR-Webhook-ID
+    description: Optionale Home-Assistant-Webhook-ID fuer die Brother-Taste Scan to OCR.
