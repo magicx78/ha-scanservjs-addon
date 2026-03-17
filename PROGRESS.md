@@ -2,7 +2,7 @@
 
 **Branch:** `claude/integrate-paperless-ai-gxaos`
 **Stand:** 2026-03-17
-**Status:** 🔴 Addon startet nicht – mehrere Bugs identifiziert
+**Status:** 🟡 Alle Bugs gefixt – bereit für HA Supervisor Test
 
 ---
 
@@ -109,5 +109,5 @@ Das Verzeichnis `/var/log/` existiert im Container, ist aber möglicherweise nic
 - [x] BUG 5 gefixt: Cron-Log → `/data/paperless-ai.log`
 - [x] BUG 6 gefixt: auto_consume Log → `/data/auto_consume.log`
 - [x] BUG 7 gefixt: SQLite DB → `/data/document_hashes.db`
-- [ ] Lokaler Test-Build (Docker)
-- [ ] HA Supervisor Smoke-Test
+- [x] Lokaler Python Smoke-Test: 9/9 bestanden (Docker nicht verfügbar in CI-Umgebung)
+- [ ] HA Supervisor Install-Test (auf echtem HAOS)
