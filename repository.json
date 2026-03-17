@@ -1,5 +1,17 @@
 {
-    "name": "scanservjs HA Addon (x86 Compatible)",
+    "name": "scanservjs HA Addons",
     "url": "https://github.com/magicx78/ha-scanservjs-addon",
-    "maintainer": "magicx78"
+    "maintainer": "magicx78",
+    "addons": [
+        {
+            "slug": "scanservjs",
+            "name": "scanservjs Scan Server",
+            "description": "Scanner Web-UI (SANE) – ohne KI"
+        },
+        {
+            "slug": "scanservjs_ai",
+            "name": "scanservjs + KI (Paperless-AI)",
+            "description": "Scanner Web-UI mit automatischer Claude-Dokumentenklassifikation"
+        }
+    ]
 }

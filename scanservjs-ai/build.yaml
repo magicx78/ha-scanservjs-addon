@@ -1,0 +1,2 @@
+build_from:
+  amd64: "sbs20/scanservjs:v3.0.3"

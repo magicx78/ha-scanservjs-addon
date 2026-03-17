@@ -1,0 +1,40 @@
+name: Paperless-AI CI
+
+on:
+  push:
+    branches:
+      - "claude/**"
+      - main
+    paths:
+      - "paperless-ai/**"
+  pull_request:
+    paths:
+      - "paperless-ai/**"
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: paperless-ai/scripts/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r paperless-ai/scripts/requirements.txt
+          pip install pytest ruff
+
+      - name: Lint with ruff
+        run: |
+          ruff check paperless-ai/scripts/ paperless-ai/tests/
+
+      - name: Run tests
+        run: |
+          pytest paperless-ai/tests/ -v --tb=short
