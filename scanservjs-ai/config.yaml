@@ -1,5 +1,5 @@
 name: "scanservjs + KI (Paperless-AI)"
-version: "1.2.6"
+version: "1.2.7"
 slug: "scanservjs_ai"
 description: "Scanner Web-UI mit automatischer KI-Dokumentenklassifikation. Scans landen direkt in Paperless-ngx – Titel, Tags und Korrespondenten werden automatisch per Claude AI vergeben."
 url: "https://github.com/magicx78/ha-scanservjs-addon"

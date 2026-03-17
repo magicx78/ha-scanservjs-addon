@@ -556,3 +556,107 @@ header.v-app-bar {
 .v-col {
   padding: 10px !important;
 }
+
+/* ─── KI Kontext-Panels (linke Sidebar, unten) ─────────────── */
+#ki-panels {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 256px;
+  z-index: 10;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.ki-panel {
+  background: rgba(28, 25, 23, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  padding: 10px 13px 11px;
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+  transition: border-color 0.2s ease;
+}
+
+.ki-panel:hover {
+  border-color: rgba(217, 119, 87, 0.35);
+}
+
+/* Panel-Header ─────────────────────────────────────────────── */
+.ki-ph {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+  margin-bottom: 7px;
+  font-family: var(--c-font);
+}
+
+/* Pulsierender Orange-Dot */
+.ki-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--c-orange);
+  animation: ki-pulse 2.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes ki-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%       { opacity: 0.3; transform: scale(0.8); }
+}
+
+/* Dateiname / Titel ────────────────────────────────────────── */
+.ki-pc {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.87);
+  line-height: 1.45;
+  word-break: break-all;
+  font-family: var(--c-font);
+}
+
+/* Zeitstempel ──────────────────────────────────────────────── */
+.ki-pt {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.28);
+  margin-top: 5px;
+  font-family: var(--c-font);
+}
+
+/* Tag-Container ────────────────────────────────────────────── */
+.ki-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Einzelner Tag-Chip ───────────────────────────────────────── */
+.ki-tag {
+  display: inline-block;
+  background: rgba(217, 119, 87, 0.15);
+  border: 1px solid rgba(217, 119, 87, 0.30);
+  color: #e09070;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-family: var(--c-font);
+  line-height: 1.6;
+}
+
+/* Auf kleinen Screens ausblenden wenn kein Platz ───────────── */
+@media (max-width: 1264px) {
+  #ki-panels {
+    display: none;
+  }
+}

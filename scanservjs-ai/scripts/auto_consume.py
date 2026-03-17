@@ -7,11 +7,13 @@ Konfiguration: /config/scripts/config.yaml
 Log:           /config/scripts/auto_consume.log
 """
 
+import json
 import logging
 import logging.handlers
 import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
@@ -98,6 +100,29 @@ def setup_logging(log_level: str) -> logging.Logger:
     logger.addHandler(stderr_handler)
 
     return logger
+
+
+_KI_STATUS_PATHS = [
+    Path("/usr/lib/scanservjs/client/dist/ki-status.json"),
+    Path("/app/client/dist/ki-status.json"),
+]
+
+
+def _write_ki_status(title: str, tags: list, doc_id: str) -> None:
+    payload = json.dumps(
+        {
+            "updated": datetime.now(timezone.utc).isoformat(),
+            "last_doc": {"id": int(doc_id), "title": title, "tags": tags},
+        },
+        ensure_ascii=False,
+    )
+    for path in _KI_STATUS_PATHS:
+        if path.parent.exists():
+            try:
+                path.write_text(payload, encoding="utf-8")
+            except Exception:
+                pass
+            return
 
 
 def sanitize(text: str) -> str:
@@ -235,7 +260,10 @@ def main() -> None:
         # --- 7. KI-Verarbeitet-Marker setzen ---
         paperless.add_tag(doc_id, "KI-Verarbeitet")
 
-        # --- 8. Erfolgs-Benachrichtigung ---
+        # --- 8. KI-Status für scanservjs UI schreiben ---
+        _write_ki_status(title, result.get("tags") or [], doc_id)
+
+        # --- 9. Erfolgs-Benachrichtigung ---
         notifier.notify_success(title, result.get("kategorie", "?"), konfidenz)
         logger.info(f"Dokument {doc_id} erfolgreich verarbeitet: {title}")
 
