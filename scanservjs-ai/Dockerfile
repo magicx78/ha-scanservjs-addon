@@ -39,6 +39,18 @@ COPY brother-skey /opt/scanservjs-brother-skey
 COPY run.sh /usr/local/bin/run.sh
 RUN chmod +x /usr/local/bin/run.sh /opt/scanservjs-brother-skey/*.sh
 
+# Claude-Theme: CSS in scanservjs-Frontend injizieren
+COPY custom.css /opt/custom.css
+RUN for html in \
+        /usr/lib/scanservjs/client/dist/index.html \
+        /app/client/dist/index.html; do \
+      if [ -f "$html" ]; then \
+        sed -i 's|</head>|<link rel="stylesheet" href="/custom.css"></head>|' "$html"; \
+        cp /opt/custom.css "$(dirname "$html")/custom.css"; \
+        echo "Claude-Theme injiziert: $html"; \
+      fi; \
+    done
+
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/local/bin/run.sh"]
