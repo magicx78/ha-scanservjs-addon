@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_PATH="/data/options.json"
 DELIMITER="${DELIMITER:-;}"
 APP_DIR="${APP_DIR:-}"
-RUNTIME_REVISION="2026-03-17-r32"
+RUNTIME_REVISION="2026-03-17-r33"
 AI_SCRIPTS_DIR="/opt/paperless-ai"
 AI_CONFIG_FILE="${AI_SCRIPTS_DIR}/config.yaml"
 
