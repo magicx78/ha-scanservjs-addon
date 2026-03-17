@@ -24,7 +24,7 @@ RUN curl -fsSL -o /tmp/bashio.tar.gz "https://github.com/hassio-addons/bashio/ar
     && ln -sf /usr/lib/bashio/bashio /usr/bin/bashio \
     && rm -rf /tmp/bashio /tmp/bashio.tar.gz
 
-# Python-Abhängigkeiten für KI-Scripts (venv vermeidet PEP 668 Konflikte)
+# Python venv + Abhängigkeiten für KI-Scripts (venv vermeidet PEP 668 Konflikte)
 COPY scripts/requirements.txt /opt/paperless-ai/requirements.txt
 RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir -r /opt/paperless-ai/requirements.txt
