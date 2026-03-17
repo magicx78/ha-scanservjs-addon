@@ -1,107 +1,127 @@
-# PROGRESS.md – scanservjs-ai Addon
+# PROGRESS.md – scanservjs-AI Addon
 
+**Repo:** https://github.com/magicx78/ha-scanservjs-addon
 **Branch:** `main`
-**Stand:** 2026-03-17 | **Runtime-Revision:** 2026-03-17-r31
-**Addon-Version:** 1.2.3
+**Aktuelle Version:** `1.2.7`
+**Stand:** 2026-03-17
 
 ---
 
-## Aktueller Status
+## Status: Stabil & laufend ✅
 
-### ✅ Alle Code-Fixes committed (v1.2.3 auf `main`)
-
-| # | Fix | Datei |
-|---|-----|-------|
-| 1 | Falsches Modell `claude-haiku-4-5` → `claude-haiku-4-5-20251001` | `scripts/claude_namer.py` |
-| 2 | Schema `str` → `str?` (optionale Felder) | `config.yaml` |
-| 3 | `int\|None` → `Optional[int]` (Python 3.9 compat) | `scripts/poll_new_docs.py` |
-| 4 | PEP 668 pip geblockt → `python3 -m venv /opt/venv` | `Dockerfile` |
-| 5 | Logs/DB in read-only `/opt/` → `/data/` | `auto_consume.py`, `run.sh` |
-| 6 | `config["key"]` KeyError → `.get("key")` | `poll_new_docs.py` |
-| 7 | Port 8181 → 8080 | `config.yaml`, `Dockerfile` |
-| 8 | Echter Token aus Git entfernt | `paperless-ai/scripts/config.yaml` |
-| 9 | `config.example.yaml` → `config.yaml.example` | HA-Warning behoben |
-| 10 | Claude-inspired CSS Theme + Dockerfile-Injection | `custom.css`, `Dockerfile` |
-| 11 | Cron nutzt `/opt/venv/bin/python3` explizit | `run.sh` |
+Das Addon baut erfolgreich, startet und läuft auf Home Assistant OS.
+Scanner (Brother MFC-L2700DW, 10.10.10.216) wird erkannt und ist aktiv.
 
 ---
 
-## 🔴 AKTIVER BLOCKER: Docker Build-Cache auf HA-Host
+## Was läuft
 
-### Symptom (aus Supervisor-Logs)
+| Komponente | Status |
+|-----------|--------|
+| Docker Build v1.2.7 | ✅ Erfolgreich |
+| scanservjs Web-UI (Port 8080) | ✅ Läuft |
+| Brother MFC-L2700DW (`brother4:net1;dev0`) | ✅ Erkannt |
+| brscan4 + brscan-skey Installation | ✅ Pro Start |
+| KI-Konfiguration (`/opt/paperless-ai/config.yaml`) | ✅ Wird geschrieben |
+| Paperless-AI Cron (alle 5 Min) | ✅ Gestartet |
+| COPY_SCANS_TO → `/share/paperless/consume` | ✅ Konfiguriert |
+| Claude.ai Theme (CSS) | ✅ Injiziert |
+| KI Sidebar-Panels (JS) | ✅ Injiziert |
+
+---
+
+## Alle Fixes (Verlauf)
+
+| Version | Commit | Was |
+|---------|--------|-----|
+| 1.2.2 | `f06f28e` | 7 Stability-Fixes: falsches Modell, Schema, Python 3.9 compat, PEP 668 venv, Logs nach /data/, KeyError, Cron-Pfad |
+| 1.2.2 | `b8b8542` | Port 8080, Token aus Git entfernt |
+| 1.2.2 | `84eaaa0` | `config.example.yaml` → `config.yaml.example` (HA Warning behoben) |
+| 1.2.3 | `2c839ce` | Claude-inspired CSS Theme, Dockerfile-Injection |
+| 1.2.4 | `57ff47f` | Docker-Cache-Bust: `python3-venv` in apt-get Text → Cache-Miss erzwungen |
+| 1.2.5 | `9f0caf6` | `brother_copy_ocr_to_target: true` — Hardware-Button-Scans gehen jetzt nach Paperless |
+| 1.2.6 | `2b56775` | UI komplett auf claude.ai Layout umgestellt: dunkle Sidebar, warme Content-Area, Inter-Font |
+| 1.2.7 | `d0ed38a` | KI Kontext-Panels in Sidebar: "Bezug / Dateiname" + "Tags" live nach KI-Klassifikation |
+
+---
+
+## Architektur
+
 ```
-#6 [ 2/10] RUN apt-get update ... python3 python3-pip cron ...
-#6 CACHED   ← ALTE LAYER ohne python3-venv !!!
-#9 [ 5/10] RUN pip3 install --no-cache-dir ...
-#9 ERROR: externally-managed-environment   ← PEP 668
-io.hass.version=1.2.0   ← HA liest alten config.yaml aus Cache
-```
-
-### Ursache
-HA baut noch immer **v1.2.0** mit **altem Dockerfile** (ohne `python3-venv`).
-Docker-Layer-Cache auf dem HA-Host ignoriert neue Git-Commits.
-
-### Lösung (USER ACTION REQUIRED)
-```bash
-# 1. SSH in Home Assistant
-ssh root@homeassistant.local
-
-# 2. Docker-Cache komplett löschen
-docker builder prune --all --force
-
-# 3. In HA UI:
-#    Settings → Add-ons → scanservjs KI → Uninstall
-#    → Repository neu hinzufügen → Addon neu installieren
-```
-
-### Erfolgskriterien nach Rebuild
-```
-io.hass.version=1.2.3           ← Neue Version
-#6 RUN apt-get ... python3-venv  ← Neue Layer, KEIN "CACHED"
-#9 RUN python3 -m venv           ← Venv wird erstellt
-Container startet ohne ERROR
+[Brother Scanner MFC-L2700DW]
+       │  USB / Netzwerk (10.10.10.216)
+       ▼
+[scanservjs Web-UI :8080]
+  ├── afterScan-Hook → /share/paperless/consume/
+  └── Brother-Button-Skripte (brscan-skey)
+           └── OCR/File → /share/paperless/consume/
+                              │
+                              ▼
+                    [Paperless-ngx Consumer]
+                    erstellt Dokument (kein document_type)
+                              │
+                              ▼
+                    [poll_new_docs.py — Cron alle 5 Min]
+                    findet Dokumente ohne document_type
+                              │
+                              ▼
+                    [auto_consume.py]
+                    ├── OCR-Text holen (Paperless API)
+                    ├── Claude Haiku 4.5 → klassifiziert
+                    ├── Titel / Tags / Typ in Paperless setzen
+                    ├── Tag "KI-Verarbeitet" setzen
+                    ├── ki-status.json schreiben → UI-Panels
+                    └── HA-Benachrichtigung senden
 ```
 
 ---
 
-## 🟡 OFFEN: Scans landen nicht in Paperless-ngx
-
-**User bestätigt:** Scans erscheinen NICHT in Paperless.
-**Konfiguration:** `copy_scans_to_mode=custom`, Pfad `/share/paperless/consume`
-
-**Untersuchung steht aus** (erst nach BLOCKER 1 möglich):
-- Feuert `afterScan`-Hook in `config.local.js`?
-- Wird `/share/paperless/consume` korrekt gemountet?
-- Sieht Paperless-ngx Dateien in `consume`-Verzeichnis?
-
----
-
-## Datei-Übersicht
+## Dateien
 
 ```
 scanservjs-ai/
-├── Dockerfile              # v1.2.3: venv, custom.css injection, port 8080
-├── config.yaml             # v1.2.3, ingress_port 8080, alle schema str?
-├── run.sh                  # r31: write_ai_config, start_ai_cron, venv cron
-├── custom.css              # Claude-Theme (orange #d97757, brown #3d2b1f)
-├── config.local.js         # scanservjs config (afterScan → COPY_SCANS_TO)
+├── Dockerfile              # venv, custom.css+js injection, port 8080
+├── config.yaml             # v1.2.7, schema alle str?, brother_copy_ocr_to_target: true
+├── run.sh                  # r35: write_ai_config, start_ai_cron, venv-Cron
+├── custom.css              # claude.ai Theme: dunkle Sidebar, warme Content-Area
+├── custom.js               # KI-Panels: polling /ki-status.json alle 30s
+├── config.local.js         # afterScan-Hook → COPY_SCANS_TO
+├── build.yaml              # amd64: sbs20/scanservjs:v3.0.3
 └── scripts/
-    ├── auto_consume.py     # KI-Pipeline: OCR → Claude → Paperless
-    ├── poll_new_docs.py    # Pollt Paperless alle 5min
-    ├── claude_namer.py     # Claude Haiku 4.5 API
+    ├── auto_consume.py     # KI-Pipeline + schreibt ki-status.json
+    ├── poll_new_docs.py    # Cron-Poller (Paperless API)
+    ├── claude_namer.py     # Claude Haiku 4.5 (claude-haiku-4-5-20251001)
     ├── paperless_api.py    # Paperless REST API wrapper
-    ├── ha_notify.py        # HA Notifications
-    ├── duplicate_check.py  # MD5-Hash Duplikat-Erkennung (DB: /data/)
+    ├── ha_notify.py        # HA persistent_notification
+    ├── duplicate_check.py  # MD5-Hash DB (/data/document_hashes.db)
     └── requirements.txt    # anthropic>=0.44.0, requests, pyyaml, etc.
 ```
 
 ---
 
+## Offene Punkte
+
+| # | Was | Priorität |
+|---|-----|-----------|
+| 1 | End-to-End Test: Web-UI Scan → Paperless → KI → Panels | 🔴 HOCH |
+| 2 | `/data/paperless-ai.log` nach Scan prüfen (KI läuft durch?) | 🟡 MITTEL |
+| 3 | KI Sidebar-Panels sichtbar nach Update auf v1.2.7? | 🟡 MITTEL |
+| 4 | brother_copy_ocr_to_target in bestehender Installation auf true setzen | 🟡 MITTEL |
+
+---
+
+## Bekannte Eigenheiten
+
+- `scanimage -L fehlgeschlagen` beim Start → **Normal**, Brother ist per `brsaneconfig4` direkt registriert, nicht über scanimage-Discovery
+- brscan-skey Prozess-Check "uneindeutig" → **Normal**, Frontpanel funktioniert trotzdem
+- brscan4 wird bei jedem Container-Start frisch installiert (apt-get) → dauert ~10 Sek extra beim Start
+- KI-Panels nur auf Screens ≥ 1264px sichtbar (kleinere Screens: ausgeblendet)
+
+---
+
 ## Nächste Schritte
 
-1. **[USER]** `docker builder prune --all --force` auf HA-Host
-2. **[USER]** Addon in HA neu installieren
-3. **[VERIFY]** Build-Log: v1.2.3 ohne CACHED apt-get Layer
-4. **[VERIFY]** Test-Scan → `/share/paperless/consume` prüfen
-5. **[VERIFY]** `/data/paperless-ai.log` auf KI-Klassifikation prüfen
-6. **[VERIFY]** Claude-Theme im scanservjs UI sichtbar
+1. **Update auf v1.2.7** in HA (Settings → Add-ons → Update)
+2. **Test**: Scan über Web-UI → Pipeline prüfen
+3. **Prüfen**: `brother_copy_ocr_to_target: true` in Addon-Konfiguration gesetzt?
+4. **Log lesen**: `/data/paperless-ai.log` nach erstem Scan
