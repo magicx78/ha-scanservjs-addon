@@ -62,15 +62,6 @@ def setup_logging(log_level: str) -> logging.Logger:
     return logger
 
 
-_UMLAUT_MAP = str.maketrans(
-    {"ae": "ae", "Ae": "Ae"}  # placeholder – echte Map unten
-)
-
-_REPLACEMENTS = [
-    ("ae", "ae"),  # wird unten korrekt gefuellt
-]
-
-
 def sanitize(text: str) -> str:
     """Entfernt Umlaute und Sonderzeichen fuer Dateinamen.
 
