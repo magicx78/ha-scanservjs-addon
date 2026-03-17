@@ -37,6 +37,6 @@ COPY brother-skey /opt/scanservjs-brother-skey
 COPY run.sh /usr/local/bin/run.sh
 RUN chmod +x /usr/local/bin/run.sh /opt/scanservjs-brother-skey/*.sh
 
-EXPOSE 8080
+EXPOSE 8181
 
 ENTRYPOINT ["/usr/local/bin/run.sh"]
