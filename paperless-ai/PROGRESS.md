@@ -38,31 +38,25 @@ mit Claude (Anthropic) als Klassifikations-Engine.
 
 ---
 
-## Noch offen (nächste Sprint-Items)
+## Sprint 2 ✅ Abgeschlossen (2026-03-17)
 
-### P0 – Tests (kritisch)
-- [ ] **`test_api_fallback.py`**: Paperless API antwortet mit leerem Body / 500 → kein Crash
-- [ ] **`test_ocr_missing.py`**: OCR-Text leer → Tag `[Pruefen]` wird gesetzt
-- [ ] **`test_claude_limit.py`**: Claude API liefert `APIStatusError` 429 → FALLBACK_RESULT
-- [ ] **`test_duplicate.py`**: Gleiche MD5 zweimal → Tag `[Duplikat]`, kein doppelter DB-Eintrag
-- [ ] **`test_build_title.py`**: Titel > 128 Zeichen wird korrekt abgeschnitten
+| ID | Task | Status |
+|----|------|--------|
+| TEST-01..05 | 32 pytest-Tests (API, OCR, Claude, Duplikat, Titel) | ✅ alle grün |
+| CI-01 | GitHub Actions ci.yml (ruff + pytest) | ✅ |
+| POLL-01 | KI-Verarbeitet-Filter in poll_new_docs.py | ✅ |
+| DOC-01 | README Cron-Polling + Env-Var-Tabelle | ✅ |
 
-### P1 – CI/CD
-- [ ] GitHub Actions Workflow: `ruff` Linting + `pytest`
-  - Datei: `.github/workflows/ci.yml`
-  - Trigger: Push auf `claude/integrate-paperless-ai-gxaos`
+## Noch offen (niedrige Priorität)
 
 ### P2 – HA-Konfiguration (Benutzeraktion erforderlich)
-- [ ] `ha_url` in `config.yaml` setzen (oder env `HA_URL`)
+- [ ] `ha_url` setzen (oder env `HA_URL`)
 - [ ] `ha_token` setzen: HA → Profil → Sicherheit → Langlebiger Token
 - [ ] `ha_notify_target` setzen: z.B. `notify.mobile_app_iphone`
 - [ ] `anthropic_api_key` setzen (API-Key Limit läuft ab 01.04.2026)
 
-### P3 – Verbesserungen
-- [ ] Poll-Filter: Dokumente mit Tag `KI-Verarbeitet` überspringen
-  (aktuell: Filter über `document_type__isnull=true` – reicht fast, aber nicht perfekt)
-- [ ] `requirements.txt` auf aktuellste Versionen prüfen
-- [ ] README.md für das `paperless-ai/` Verzeichnis
+### P3 – Nice-to-have
+- [ ] `requirements.txt` Versionen prüfen/aktualisieren
 
 ---
 
