@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.8] - 2026-03-21
+
+### Added
+- Claude access type selection in config: `api_key`, `subscription`, or `none`
+- UX improvement for users with different Claude subscription types
+- Config option `claude_access_type` to differentiate API usage patterns
+
+### Changed
+- VERSION file now synced with addon version (1.2.8)
+- AI config generation now respects `claude_access_type` setting
+
+### Fixed
+- When `claude_access_type` is set to `none`, KI-Klassifikation is gracefully disabled
+
 ## [1.0.13] - 2026-03-16
 
 ### Fixed

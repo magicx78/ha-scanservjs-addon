@@ -660,14 +660,20 @@ register_brother() {
 # ---------------------------------------------------------------------------
 
 write_ai_config() {
-  local api_key paperless_url paperless_token ha_notify min_konfidenz log_level
+  local api_key paperless_url paperless_token ha_notify min_konfidenz log_level claude_access
 
   api_key="$(opt '.anthropic_api_key // ""')"
   paperless_url="$(opt '.paperless_url // "http://ca5234a0-paperless-ngx:8000"')"
   paperless_token="$(opt '.paperless_token // ""')"
   ha_notify="$(opt '.ha_notify_target // "notify.persistent_notification"')"
   min_konfidenz="$(opt '.min_konfidenz // 0.7')"
+  claude_access="$(opt '.claude_access_type // "api_key"')"
   log_level="INFO"
+
+  if [[ "$claude_access" == "none" ]]; then
+    warn "Claude-Zugang auf 'Kein Zugang' gesetzt – KI-Klassifikation deaktiviert."
+    return 1
+  fi
 
   if [[ -z "$api_key" || "$api_key" == "null" || "$api_key" == '""' ]]; then
     warn "anthropic_api_key nicht gesetzt – KI-Klassifikation deaktiviert."
@@ -684,14 +690,15 @@ write_ai_config() {
 
   cat > "${AI_CONFIG_FILE}" <<YAML
 # Automatisch generiert vom Addon – nicht manuell bearbeiten
-paperless_url:    "${paperless_url}"
-paperless_token:  "${paperless_token}"
-anthropic_api_key: "${api_key}"
-ha_url:           "${ha_url}"
-ha_token:         "${ha_token}"
-ha_notify_target: "${ha_notify}"
-min_konfidenz:    ${min_konfidenz}
-log_level:        "${log_level}"
+paperless_url:     "${paperless_url}"
+paperless_token:   "${paperless_token}"
+claude_access_type: "${claude_access}"
+anthropic_api_key:  "${api_key}"
+ha_url:            "${ha_url}"
+ha_token:          "${ha_token}"
+ha_notify_target:  "${ha_notify}"
+min_konfidenz:     ${min_konfidenz}
+log_level:         "${log_level}"
 YAML
 
   chmod 600 "${AI_CONFIG_FILE}"
