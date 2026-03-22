@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.4.0] - 2026-03-22
+
+### Added
+- **Datenfresser Claude-Klassifikation** — Erweiterte Dokumentenverarbeitung mit KI-gestütztem Tagging:
+  - Automatische OCR-Text-Klassifikation via Claude API (optional)
+  - Kategorie-, Tag-, Person-, Firma-Extraktion
+  - Vorberechnete Classifications werden in Cache-Verzeichnis gespeichert
+  - auto_consume.py nutzt Datenfresser-Classifications wenn verfügbar (fallback zu Live-Claude)
+  - Konfidenz-Tracking für manuelle Validierung (Prüfen-Tag bei niedriger Konfidenz)
+
+### Improved
+- **Klassifikations-Workflow optimiert:**
+  - Duplicate-Check zuerst (spart OCR für Duplikate)
+  - Paperless-Kontext vor OCR abrufbar (vorbereitet für zukünftige Erweiterungen)
+  - Intelligentes Fallback: Datenfresser-Cache vor Live-Claude API
+  - Strukturierte JSON-Metadata in `/share/datenfresser/cache/` für inter-process Kommunikation
+
+### Changed
+- Datenfresser jetzt mit optionaler Claude-Klassifikation (deaktivierbar via `claude_access_type: none`)
+- auto_consume.py: Erweiterte Logik zum Laden und Anwenden von Datenfresser-Classifications
+
 ## [1.3.0] - 2026-03-22
 
 ### Added

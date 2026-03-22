@@ -9,9 +9,11 @@ Log:           /data/datenfresser.log
 """
 
 import fcntl
+import json
 import logging
 import logging.handlers
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -25,6 +27,8 @@ SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from duplicate_check import DuplicateChecker  # noqa: E402
+from claude_namer import ClaudeNamer  # noqa: E402
+from paperless_api import PaperlessAPI  # noqa: E402
 
 SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif"}
 LOCK_FILE = Path("/data/datenfresser.lock")
@@ -37,6 +41,8 @@ _ENV_OVERRIDES = {
     "copy_scans_to":                "COPY_SCANS_TO",
     "ocr_lang":                     "OCR_LANG",
 }
+
+DATENFRESSER_CACHE_DIR = Path("/share/datenfresser/cache")
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +202,47 @@ def run_ocr(
     return None
 
 
+def extract_text_from_pdf(pdf_path: Path, logger: logging.Logger) -> str:
+    """Extrahiert Text aus PDF (z.B. nach OCR)."""
+    try:
+        result = subprocess.run(
+            ["pdftotext", str(pdf_path), "-"],
+            capture_output=True, text=True, timeout=15
+        )
+        return result.stdout.strip() if result.returncode == 0 else ""
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception) as exc:
+        logger.debug(f"{pdf_path.name}: Text-Extraktion fehlgeschlagen: {exc}")
+        return ""
+
+
+def sanitize(text: str) -> str:
+    """Entfernt Umlaute und Sonderzeichen für Dateinamen."""
+    for src, dst in (
+        ("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss"),
+        ("Ä", "Ae"), ("Ö", "Oe"), ("Ü", "Ue"),
+        (" ", "-"),
+    ):
+        text = text.replace(src, dst)
+    text = re.sub(r"[^\w\-\.]", "", text)
+    return text
+
+
+def build_title(result: dict) -> str:
+    """Baut Dokumententitel nach Schema:
+    JJJJ-MM-TT_Kategorie_Beschreibung_[Tag1][Tag2]...[Tag10]
+    """
+    datum = result.get("datum") or "0000-00-00"
+    kategorie = sanitize(result.get("kategorie") or "Sonstiges")
+    beschreibung = sanitize(result.get("beschreibung") or "Unbekannt")
+    tags = [t for t in (result.get("tags") or []) if t][:10]
+    tag_str = "".join(f"[{sanitize(str(t))}]" for t in tags)
+
+    parts = [datum, kategorie, beschreibung]
+    if tag_str:
+        parts.append(tag_str)
+    return "_".join(parts)[:128]
+
+
 # ---------------------------------------------------------------------------
 # Hauptschleife
 # ---------------------------------------------------------------------------
@@ -208,6 +255,8 @@ def watch_once(
     ocr_lang: str,
     seen: set,
     logger: logging.Logger,
+    namer: Optional["ClaudeNamer"] = None,
+    paperless: Optional["PaperlessAPI"] = None,
 ) -> None:
     """Verarbeitet alle neuen Dateien in watch_dir."""
     try:
@@ -276,6 +325,38 @@ def watch_once(
 
             # Hash registrieren
             checker.register_document(md5, entry.name, doc_id="datenfresser")
+
+            # --- Claude-Klassifikation (Optional) ---
+            classif_json = None
+            if namer and paperless:
+                try:
+                    ocr_text = extract_text_from_pdf(out_file, logger)
+                    if ocr_text and ocr_text.strip():
+                        result = namer.classify(ocr_text[:3000])
+                        title = build_title(result)
+                        classif_json = {
+                            "filename": out_file.name,
+                            "titel": title,
+                            "kategorie": result.get("kategorie"),
+                            "tags": result.get("tags") or [],
+                            "firma": result.get("firma"),
+                            "person": result.get("person"),
+                            "datum": result.get("datum"),
+                            "konfidenz": result.get("konfidenz"),
+                        }
+                        # JSON-Datei in Cache-Verzeichnis schreiben (für poll_new_docs.py)
+                        try:
+                            DATENFRESSER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                            json_path = DATENFRESSER_CACHE_DIR / out_file.with_suffix(".json").name
+                            json_path.write_text(json.dumps(classif_json, ensure_ascii=False), encoding="utf-8")
+                            logger.debug(f"{out_file.name}: Classification in Cache geschrieben")
+                        except OSError as exc:
+                            logger.warning(f"{out_file.name}: Fehler beim Schreiben von Cache-JSON: {exc}")
+                    else:
+                        logger.debug(f"{out_file.name}: Kein OCR-Text für Klassifikation")
+                except Exception as exc:
+                    logger.warning(f"{out_file.name}: Klassifikation fehlgeschlagen: {exc}")
+
             logger.info(f"{entry.name} → {out_file.name} in consume/ verschoben ✓")
 
         except Exception as exc:
@@ -327,6 +408,21 @@ def main() -> None:
 
         checker = DuplicateChecker(Path("/data/document_hashes.db"), logger)
 
+        # --- Claude-Klassifikation (Optional) ---
+        namer = None
+        paperless = None
+        if config.get("claude_access_type") != "none" and config.get("anthropic_api_key"):
+            try:
+                namer = ClaudeNamer(config, logger)
+                paperless = PaperlessAPI(config, logger)
+                logger.info("Claude-Klassifikation aktiviert")
+            except Exception as exc:
+                logger.warning(f"Claude-Klassifikation nicht verfügbar: {exc}")
+                namer = None
+                paperless = None
+        else:
+            logger.info("Claude-Klassifikation deaktiviert (claude_access_type=none oder kein API-Key)")
+
         logger.info(
             f"Datenfresser gestartet | inbox={watch_dir} | consume={consume_dir} "
             f"| duplicates={dup_dir} | poll={poll_secs}s | lang={ocr_lang}"
@@ -339,7 +435,7 @@ def main() -> None:
         while True:
             try:
                 if consume_dir.exists():
-                    watch_once(watch_dir, consume_dir, dup_dir, checker, ocr_lang, seen, logger)
+                    watch_once(watch_dir, consume_dir, dup_dir, checker, ocr_lang, seen, logger, namer, paperless)
                     consecutive_errors = 0  # Reset bei erfolgreichem Durchlauf
                 else:
                     if consecutive_errors == 0:

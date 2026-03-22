@@ -19,6 +19,8 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
+DATENFRESSER_CACHE_DIR = Path("/share/datenfresser/cache")
+
 import yaml  # noqa: E402 (nach sys.path-Setup)
 
 from claude_namer import ClaudeNamer
@@ -158,6 +160,36 @@ def build_title(result: dict) -> str:
     return "_".join(parts)[:128]
 
 
+def load_datenfresser_classification(filename: str, logger: logging.Logger) -> dict:
+    """Lädt vorberechnete Classification aus Datenfresser-Cache (falls vorhanden).
+
+    Returns: dict mit Klassifikation oder {} falls nicht vorhanden.
+    """
+    if not DATENFRESSER_CACHE_DIR.exists():
+        return {}
+
+    # Entferne .pdf/.jpg etc, füge .json hinzu
+    base_name = Path(filename).stem
+    json_name = f"{base_name}.json"
+    json_path = DATENFRESSER_CACHE_DIR / json_name
+
+    if not json_path.exists():
+        return {}
+
+    try:
+        data = json.loads(json_path.read_text(encoding="utf-8"))
+        logger.debug(f"Datenfresser-Classification geladen: {json_name}")
+        # Nach Anwendung: JSON löschen
+        try:
+            json_path.unlink()
+        except OSError as exc:
+            logger.debug(f"Fehler beim Löschen von {json_name}: {exc}")
+        return data
+    except Exception as exc:
+        logger.warning(f"Fehler beim Laden von {json_name}: {exc}")
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Hauptlogik
 # ---------------------------------------------------------------------------
@@ -207,29 +239,36 @@ def main() -> None:
             else:
                 logger.debug("Kein DOCUMENT_SOURCE_PATH gesetzt (Polling-Modus)")
 
-        # --- 2. OCR-Text holen ---
-        ocr_text = paperless.get_document_content(doc_id)
+        # --- 2. Datenfresser-Classification laden (falls vorhanden) ---
+        datenfresser_result = load_datenfresser_classification(doc_filename, logger)
 
-        if not ocr_text and source_path and source_path.exists():
-            logger.info("Paperless-Content leer – versuche PDF-Direktextraktion")
-            try:
-                from pdfminer.high_level import extract_text as pdf_extract  # type: ignore
-                ocr_text = pdf_extract(str(source_path), maxpages=2) or ""
-            except Exception as exc:
-                logger.warning(f"PDF-Fallback fehlgeschlagen: {exc}")
+        if datenfresser_result:
+            logger.info(f"Verwende Datenfresser-Classification für {doc_filename}")
+            result = datenfresser_result
+        else:
+            # --- 3. OCR-Text holen (nur falls Datenfresser-Classification nicht vorhanden) ---
+            ocr_text = paperless.get_document_content(doc_id)
 
-        if not (ocr_text and ocr_text.strip()):
-            logger.warning("Kein OCR-Text verfuegbar – Dokument wird mit [Pruefen] markiert")
-            paperless.add_tag(doc_id, "Pruefen")
-            notifier.notify_warning(
-                f"Kein OCR-Text fuer Dokument {doc_id} ({doc_filename}) – bitte manuell pruefen"
-            )
-            return
+            if not ocr_text and source_path and source_path.exists():
+                logger.info("Paperless-Content leer – versuche PDF-Direktextraktion")
+                try:
+                    from pdfminer.high_level import extract_text as pdf_extract  # type: ignore
+                    ocr_text = pdf_extract(str(source_path), maxpages=2) or ""
+                except Exception as exc:
+                    logger.warning(f"PDF-Fallback fehlgeschlagen: {exc}")
 
-        # --- 3. Claude API: Klassifikation ---
-        result = namer.classify(ocr_text[:3000])
+            if not (ocr_text and ocr_text.strip()):
+                logger.warning("Kein OCR-Text verfuegbar – Dokument wird mit [Pruefen] markiert")
+                paperless.add_tag(doc_id, "Pruefen")
+                notifier.notify_warning(
+                    f"Kein OCR-Text fuer Dokument {doc_id} ({doc_filename}) – bitte manuell pruefen"
+                )
+                return
 
-        # --- 4. Paperless-Metadaten aktualisieren ---
+            # --- 4. Claude API: Klassifikation (fallback wenn kein Datenfresser-Cache) ---
+            result = namer.classify(ocr_text[:3000])
+
+        # --- 5. Paperless-Metadaten aktualisieren ---
         title = build_title(result)
         paperless.update_document(
             doc_id=doc_id,
@@ -240,7 +279,7 @@ def main() -> None:
             created=result.get("datum"),
         )
 
-        # --- 5. Konfidenz-Check ---
+        # --- 6. Konfidenz-Check ---
         konfidenz: float = float(result.get("konfidenz") or 1.0)
         min_konfidenz: float = float(config.get("min_konfidenz", 0.7))
 
@@ -253,17 +292,17 @@ def main() -> None:
                 f"Konfidenz {konfidenz:.0%} fuer \u201e{title}\u201c – bitte manuell pruefen"
             )
 
-        # --- 6. Hash registrieren ---
+        # --- 7. Hash registrieren ---
         if md5:
             checker.register_document(md5, doc_filename, doc_id)
 
-        # --- 7. KI-Verarbeitet-Marker setzen ---
+        # --- 8. KI-Verarbeitet-Marker setzen ---
         paperless.add_tag(doc_id, "KI-Verarbeitet")
 
-        # --- 8. KI-Status für scanservjs UI schreiben ---
+        # --- 9. KI-Status für scanservjs UI schreiben ---
         _write_ki_status(title, result.get("tags") or [], doc_id)
 
-        # --- 9. Erfolgs-Benachrichtigung ---
+        # --- 10. Erfolgs-Benachrichtigung ---
         notifier.notify_success(title, result.get("kategorie", "?"), konfidenz)
         logger.info(f"Dokument {doc_id} erfolgreich verarbeitet: {title}")
 
