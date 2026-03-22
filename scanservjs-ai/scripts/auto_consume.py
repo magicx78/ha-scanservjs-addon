@@ -178,7 +178,7 @@ def load_datenfresser_classification(filename: str, logger: logging.Logger) -> d
 
     try:
         data = json.loads(json_path.read_text(encoding="utf-8"))
-        logger.debug(f"Datenfresser-Classification geladen: {json_name}")
+        logger.debug(f"Datenfresser-Cache geladen: {json_name}")
         # Nach Anwendung: JSON löschen
         try:
             json_path.unlink()
@@ -242,6 +242,24 @@ def main() -> None:
         # --- 2. Datenfresser-Classification laden (falls vorhanden) ---
         datenfresser_result = load_datenfresser_classification(doc_filename, logger)
 
+        # Spezialfall: Datenfresser-Duplikat erkannt
+        if datenfresser_result and datenfresser_result.get("is_duplicate"):
+            logger.info(f"Datenfresser-Duplikat erkannt: {doc_filename}")
+            paperless.add_tag(doc_id, "Duplikat")
+            notifier.notify_warning(
+                f"Duplikat erkannt: {doc_filename} "
+                f"(Original: {datenfresser_result.get('original', '?')})"
+            )
+            # Hash registrieren falls möglich
+            if source_path and source_path.exists():
+                try:
+                    md5 = checker.calculate_md5(source_path)
+                    checker.register_document(md5, doc_filename, doc_id)
+                except OSError as exc:
+                    logger.debug(f"MD5 konnte nicht berechnet werden: {exc}")
+            return
+
+        # Normale Klassifikation (wenn keine Duplikat)
         if datenfresser_result:
             logger.info(f"Verwende Datenfresser-Classification für {doc_filename}")
             result = datenfresser_result

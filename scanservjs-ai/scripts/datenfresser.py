@@ -296,26 +296,39 @@ def watch_once(
 
             is_dup, original = checker.is_duplicate(md5)
             if is_dup:
+                # Duplikat erkannt: Auch zu duplicates/ UND zu consume/ (mit "is_duplicate"-Marker)
                 dup_target = dup_dir / entry.name
                 # Eindeutigen Namen vergeben falls Duplikat-Ordner schon denselben Namen hat
                 if dup_target.exists():
                     dup_target = dup_dir / f"{entry.stem}_{int(time.time())}{entry.suffix}"
                 try:
-                    shutil.move(str(entry), str(dup_target))
+                    shutil.copy2(str(entry), str(dup_target))
                     logger.warning(
                         f"Duplikat erkannt: {entry.name!r} identisch mit {original!r} "
-                        f"→ verschoben nach {dup_dir.name}/"
+                        f"→ Kopie nach {dup_dir.name}/"
                     )
                 except OSError as exc:
-                    logger.error(f"{entry.name}: Fehler beim Verschieben zu Duplikaten: {exc}")
-                continue
+                    logger.error(f"{entry.name}: Fehler beim Kopieren zu Duplikaten: {exc}")
 
-            # OCR + in consume verschieben
+                # Duplikat auch OCR + consume/ mit Marker
+                is_dup_flag = True
+            else:
+                is_dup_flag = False
+
+            # OCR + in consume verschieben (für beide: normale Dateien + Duplikate)
             out_file = run_ocr(entry, consume_dir, ocr_lang, logger)
             if out_file is None:
                 logger.error(f"{entry.name}: OCR fehlgeschlagen – Datei bleibt in Inbox")
                 seen.discard(entry)
                 continue
+
+            # Falls Duplikat: Original aus Inbox löschen (nach erfolgreicher OCR)
+            # (bei normalen Dateien passiert das später)
+            if is_dup_flag:
+                try:
+                    entry.unlink()
+                except OSError as exc:
+                    logger.warning(f"{entry.name}: Original konnte nicht gelöscht werden: {exc}")
 
             # Original aus Inbox entfernen (nur wenn OCR erfolgreich)
             try:
@@ -330,30 +343,42 @@ def watch_once(
             classif_json = None
             if namer and paperless:
                 try:
-                    ocr_text = extract_text_from_pdf(out_file, logger)
-                    if ocr_text and ocr_text.strip():
-                        result = namer.classify(ocr_text[:3000])
-                        title = build_title(result)
+                    if is_dup_flag:
+                        # Für Duplikate: Nur Marker setzen, nicht klassifizieren
                         classif_json = {
                             "filename": out_file.name,
-                            "titel": title,
-                            "kategorie": result.get("kategorie"),
-                            "tags": result.get("tags") or [],
-                            "firma": result.get("firma"),
-                            "person": result.get("person"),
-                            "datum": result.get("datum"),
-                            "konfidenz": result.get("konfidenz"),
+                            "is_duplicate": True,
+                            "original": original,
                         }
-                        # JSON-Datei in Cache-Verzeichnis schreiben (für poll_new_docs.py)
+                        logger.debug(f"{out_file.name}: Duplikat-Marker gespeichert")
+                    else:
+                        # Normal: OCR-Text klassifizieren
+                        ocr_text = extract_text_from_pdf(out_file, logger)
+                        if ocr_text and ocr_text.strip():
+                            result = namer.classify(ocr_text[:3000])
+                            title = build_title(result)
+                            classif_json = {
+                                "filename": out_file.name,
+                                "titel": title,
+                                "kategorie": result.get("kategorie"),
+                                "tags": result.get("tags") or [],
+                                "firma": result.get("firma"),
+                                "person": result.get("person"),
+                                "datum": result.get("datum"),
+                                "konfidenz": result.get("konfidenz"),
+                            }
+                        else:
+                            logger.debug(f"{out_file.name}: Kein OCR-Text für Klassifikation")
+
+                    # JSON-Datei in Cache-Verzeichnis schreiben (für poll_new_docs.py)
+                    if classif_json:
                         try:
                             DATENFRESSER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
                             json_path = DATENFRESSER_CACHE_DIR / out_file.with_suffix(".json").name
                             json_path.write_text(json.dumps(classif_json, ensure_ascii=False), encoding="utf-8")
-                            logger.debug(f"{out_file.name}: Classification in Cache geschrieben")
+                            logger.debug(f"{out_file.name}: JSON in Cache geschrieben")
                         except OSError as exc:
                             logger.warning(f"{out_file.name}: Fehler beim Schreiben von Cache-JSON: {exc}")
-                    else:
-                        logger.debug(f"{out_file.name}: Kein OCR-Text für Klassifikation")
                 except Exception as exc:
                     logger.warning(f"{out_file.name}: Klassifikation fehlgeschlagen: {exc}")
 
