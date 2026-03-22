@@ -45,6 +45,12 @@ options:
   min_konfidenz: 0.7
   ai_poll_interval: 5
 
+  # --- Datenfresser (Folder Watcher) --------------------------------
+  datenfresser_enabled: true
+  datenfresser_path: "/share/datenfresser/inbox"
+  datenfresser_duplicates_path: "/share/datenfresser/duplicates"
+  datenfresser_poll_interval: 30
+
   # --- Scanner ---------------------------------------------------
   saned_net_hosts: ""
   airscan_devices: ""
@@ -92,6 +98,12 @@ schema:
   ha_notify_target: str?
   min_konfidenz: float?
   ai_poll_interval: int?
+
+  # --- Datenfresser (Folder Watcher) --------------------------------
+  datenfresser_enabled: bool?
+  datenfresser_path: str?
+  datenfresser_duplicates_path: str?
+  datenfresser_poll_interval: int?
 
   # --- Scanner ---------------------------------------------------
   saned_net_hosts: str?

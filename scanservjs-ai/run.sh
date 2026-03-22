@@ -720,6 +720,20 @@ start_ai_cron() {
   log "Paperless-AI Cron gestartet (alle ${interval} Minuten)"
 }
 
+start_datenfresser() {
+  local enabled
+  enabled="$(opt '.datenfresser_enabled // true')"
+
+  if [[ "${enabled}" != "true" ]]; then
+    log "Datenfresser deaktiviert"
+    return 0
+  fi
+
+  log "Starte Datenfresser (Folder Watcher)..."
+  nohup /opt/venv/bin/python3 "${AI_SCRIPTS_DIR}/datenfresser.py" >> /data/datenfresser.log 2>&1 &
+  log "Datenfresser im Hintergrund gestartet"
+}
+
 main() {
   export SANED_NET_HOSTS AIRSCAN_DEVICES SCANIMAGE_LIST_IGNORE DEVICES OCR_LANG COPY_SCANS_TO
   export BROTHER_BUTTON_OUTPUT_DIR_OVERRIDE
@@ -875,6 +889,9 @@ main() {
   else
     log "KI-Klassifikation uebersprungen (fehlende Konfiguration)"
   fi
+
+  # --- Datenfresser starten ------------------------------------------
+  start_datenfresser
 
   log "Nutze scanservjs App-Verzeichnis: ${app_dir}"
   cd "${app_dir}"

@@ -8,11 +8,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV ENABLE_BROTHER_SUPPORT=true
 ARG BASHIO_VERSION=v0.16.2
 
-# System-Pakete: scanservjs-Basis + Python für KI-Scripts (build: 2026-03-17-v4)
+# System-Pakete: scanservjs-Basis + Python für KI-Scripts + OCR (build: 2026-03-22-v5)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         jq curl ca-certificates libusb-0.1-4 sane-airscan iproute2 \
         python3 python3-pip python3-venv cron \
+        tesseract-ocr tesseract-ocr-deu ocrmypdf poppler-utils \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
