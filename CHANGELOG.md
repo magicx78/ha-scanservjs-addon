@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.3.0] - 2026-03-22
+
+### Added
+- **Datenfresser** — Folder watcher for automatic document processing:
+  - Monitors inbox folder for new documents (PDF, JPG, PNG, TIFF)
+  - MD5-based duplicate detection (reuses existing hash database)
+  - Automatic OCR with ocrmypdf (PDFs) and tesseract (images)
+  - German+English language support (configurable)
+  - Automatic file organization: non-duplicates → consume folder
+- Configurable poll interval (default: 30s)
+- Configurable inbox/duplicates paths
+
+### Improved
+- **Stability & Error Handling:**
+  - Exclusive lock file prevents parallel instances
+  - Retry logic for OCR operations (2 retries with backoff)
+  - Improved timeout handling (180s for large PDFs)
+  - Memory leak prevention: seen-set auto-cleanup
+  - Exception handling with error counter (auto-recovery)
+  - Graceful degradation on failures
+  - Comprehensive logging and error reporting
+  - Keyboard interrupt handling
+- Docker dependencies: added tesseract-ocr, ocrmypdf, poppler-utils
+
 ## [1.2.8] - 2026-03-21
 
 ### Added
