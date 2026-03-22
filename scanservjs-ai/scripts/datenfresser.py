@@ -29,6 +29,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from duplicate_check import DuplicateChecker  # noqa: E402
 from claude_namer import ClaudeNamer  # noqa: E402
 from paperless_api import PaperlessAPI  # noqa: E402
+from ha_notify import HANotifier  # noqa: E402
 
 SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif"}
 LOCK_FILE = Path("/data/datenfresser.lock")
@@ -243,6 +244,26 @@ def build_title(result: dict) -> str:
     return "_".join(parts)[:128]
 
 
+def write_ki_status(filename: str, title: str, tags: list, konfidenz: float, kategorie: str) -> None:
+    """Schreibt Echtzeit-KI-Status für UI-Widget (custom.js)."""
+    try:
+        status = {
+            "last_doc": {
+                "filename": filename,
+                "title": title,
+                "tags": tags or [],
+                "konfidenz": konfidenz,
+                "kategorie": kategorie,
+            },
+            "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        status_file = Path("/data/ki-status.json")
+        status_file.write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        # Fehler beim Status-Schreiben soll nicht den Hauptfluss blockieren
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Hauptschleife
 # ---------------------------------------------------------------------------
@@ -257,6 +278,7 @@ def watch_once(
     logger: logging.Logger,
     namer: Optional["ClaudeNamer"] = None,
     paperless: Optional["PaperlessAPI"] = None,
+    notifier: Optional["HANotifier"] = None,
 ) -> None:
     """Verarbeitet alle neuen Dateien in watch_dir."""
     try:
@@ -384,6 +406,20 @@ def watch_once(
 
             logger.info(f"{entry.name} → {out_file.name} in consume/ verschoben ✓")
 
+            # UI-Status aktualisieren (für custom.js Echtzeit-Widget)
+            if classif_json:
+                write_ki_status(
+                    filename=out_file.name,
+                    title=classif_json.get("titel") or out_file.stem,
+                    tags=classif_json.get("tags") or [],
+                    konfidenz=classif_json.get("konfidenz") or 0,
+                    kategorie=classif_json.get("kategorie") or "Unbekannt",
+                )
+
+            # HA-Automation triggern wenn konfiguriert
+            if notifier:
+                notifier.trigger_automation()
+
         except Exception as exc:
             logger.error(f"Unerwarteter Fehler bei {entry.name}: {exc}", exc_info=True)
             seen.discard(entry)
@@ -432,6 +468,7 @@ def main() -> None:
             logger.warning(f"consume-Ordner existiert nicht: {consume_dir} – Datenfresser wartet")
 
         checker = DuplicateChecker(Path("/data/document_hashes.db"), logger)
+        notifier = HANotifier(config, logger)
 
         # --- Claude-Klassifikation (Optional) ---
         namer = None
@@ -460,7 +497,7 @@ def main() -> None:
         while True:
             try:
                 if consume_dir.exists():
-                    watch_once(watch_dir, consume_dir, dup_dir, checker, ocr_lang, seen, logger, namer, paperless)
+                    watch_once(watch_dir, consume_dir, dup_dir, checker, ocr_lang, seen, logger, namer, paperless, notifier)
                     consecutive_errors = 0  # Reset bei erfolgreichem Durchlauf
                 else:
                     if consecutive_errors == 0:

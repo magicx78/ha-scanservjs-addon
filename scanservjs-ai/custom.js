@@ -27,6 +27,10 @@
       '<div class="ki-panel" id="ki-p2">' +
         '<div class="ki-ph"><span class="ki-dot"></span>Tags</div>' +
         '<div class="ki-tags" id="ki-tags"><span class="ki-tag">–</span></div>' +
+      '</div>' +
+      '<div class="ki-panel" id="ki-p3">' +
+        '<div class="ki-ph"><span class="ki-dot"></span>Kategorie / Konfidenz</div>' +
+        '<div class="ki-pmeta" id="ki-meta">–</div>' +
       '</div>';
     document.body.appendChild(wrap);
   }
@@ -35,6 +39,7 @@
     var t  = document.getElementById('ki-title');
     var tm = document.getElementById('ki-time');
     var tg = document.getElementById('ki-tags');
+    var tm2 = document.getElementById('ki-meta');
     if (!t) return;
     if (data && data.last_doc) {
       var doc = data.last_doc;
@@ -45,6 +50,12 @@
         tg.innerHTML = tags.length
           ? tags.map(function(s){ return '<span class="ki-tag">'+s+'</span>'; }).join('')
           : '<span class="ki-tag">–</span>';
+      }
+      if (tm2) {
+        var cat = doc.kategorie || '–';
+        var conf = doc.konfidenz || 0;
+        var confPercent = Math.round(conf * 100);
+        tm2.textContent = cat + ' (' + confPercent + '%)';
       }
     }
   }

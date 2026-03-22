@@ -1,5 +1,48 @@
 # Changelog
 
+## [2.0.0] - 2026-03-22
+
+### Added
+- **HA-Integration (HA-501):**
+  - Native Home Assistant Notifications für KI-Klassifikationen
+  - Automation-Trigger bei neuen Dokumenten (`ha_automation_entity_id`)
+  - Konfigurierbare Benachrichtigungs-Targets (notify.* Services)
+  - Graceful Error-Handling (Benachrichtigungen blockieren nicht den Hauptfluss)
+
+- **KI-Status Real-time Widget (UI-501):**
+  - Live-Dashboard für letzte klassifizierte Dokumente
+  - Echtzeit-Anzeige: Titel, Tags, Kategorie, Konfidenz (%)
+  - `/ki-status.json` API-Endpoint (statisch von datenfresser.py geschrieben)
+  - custom.js erweitert mit neuer Kategorie/Konfidenz-Panel
+  - 30s Polling-Interval (konfigurierbar)
+
+- **Performance: Classification-Cache (PERF-501):**
+  - Hybrid-Cache für Claude-Klassifikationen (SQLite + optional Redis)
+  - Basis: SQLite mit WAL, Indexes für schnelle Lookups
+  - Optional: Redis als L1-Cache für verteilte Systeme
+  - TTL-Management (24h Standard, konfigurierbar)
+  - MD5-basierte Input-Hashing (für Duplikat-Erkennung auf Klassifikationsebene)
+  - Cache-Cleanup-Utility für abgelaufene Einträge
+
+### Improved
+- **datenfresser.py:**
+  - HANotifier Integration für HA-Benachrichtigungen
+  - `write_ki_status()` für Echtzeit-UI-Updates
+  - Bessere Fehlerbehandlung bei Cache-Operationen
+
+- **claude_namer.py:**
+  - HybridCache vor/nach API-Calls
+  - Graceful Fallback bei fehlender Redis
+  - Reduzierte API-Calls durch intelligentes Caching
+
+- **config.yaml:**
+  - 12 neue Optionen (HA + Cache)
+  - `cache_enabled` (deaktivierbar für minimale Footprint)
+  - `redis_url` optional (nur für Enterprise-Setups)
+
+### Changed
+- Version: 1.5.0 → 2.0.0
+
 ## [1.5.0] - 2026-03-22
 
 ### Added

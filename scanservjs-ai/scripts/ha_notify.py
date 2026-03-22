@@ -1,12 +1,14 @@
 """
-Home Assistant REST API – Benachrichtigungen
+Home Assistant REST API – Benachrichtigungen & Automation-Trigger
 
 Konfiguration (config.yaml):
-  ha_url           : http://homeassistant.local:8123
-  ha_token         : <Long-Lived Access Token>
-  ha_notify_target : notify.mobile_app_iphone   (Domain.ServiceName)
+  ha_url                      : http://homeassistant.local:8123
+  ha_token                    : <Long-Lived Access Token>
+  ha_notify_target            : notify.mobile_app_iphone   (Domain.ServiceName)
+  ha_automation_entity_id     : automation.datenfresser_trigger (optional)
 
 Wenn ha_url oder ha_token fehlen, werden Benachrichtigungen still uebersprungen.
+Automation-Trigger nur wenn ha_automation_entity_id gesetzt.
 """
 
 import logging
@@ -18,6 +20,7 @@ class HANotifier:
     def __init__(self, config: dict, logger: logging.Logger) -> None:
         self.logger = logger
         self.enabled = bool(config.get("ha_url") and config.get("ha_token"))
+        self.automation_entity_id = config.get("ha_automation_entity_id", "")
 
         if not self.enabled:
             self.logger.warning(
@@ -25,6 +28,7 @@ class HANotifier:
                 "(ha_url oder ha_token fehlen in config.yaml)"
             )
             self.notify_url = ""
+            self.automation_url = ""
             return
 
         ha_url = config["ha_url"].rstrip("/")
@@ -39,6 +43,7 @@ class HANotifier:
             domain, service = "notify", parts[0]
 
         self.notify_url = f"{ha_url}/api/services/{domain}/{service}"
+        self.automation_url = f"{ha_url}/api/services/automation/trigger"
 
         self.session = requests.Session()
         self.session.headers.update(
@@ -72,6 +77,21 @@ class HANotifier:
             title="Duplikat erkannt",
             message=f"Neu: {filename}\nOriginal: {original}",
         )
+
+    def trigger_automation(self) -> None:
+        """Triggert eine HA Automation (z.B. für Datenfresser-Ereignis)."""
+        if not self.enabled or not self.automation_entity_id:
+            return
+        try:
+            resp = self.session.post(
+                self.automation_url,
+                json={"entity_id": self.automation_entity_id},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            self.logger.debug(f"HA-Automation getrggert: {self.automation_entity_id!r}")
+        except requests.RequestException as exc:
+            self.logger.warning(f"HA-Automation Trigger fehlgeschlagen: {exc}")
 
     # -----------------------------------------------------------------------
     # Interne Helfer

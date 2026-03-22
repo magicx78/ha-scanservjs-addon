@@ -1,5 +1,5 @@
 name: "scanservjs + KI (Paperless-AI)"
-version: "1.5.0"
+version: "2.0.0"
 slug: "scanservjs_ai"
 description: "Scanner Web-UI mit automatischer KI-Dokumentenklassifikation. Scans landen direkt in Paperless-ngx – Titel, Tags und Korrespondenten werden automatisch per Claude AI vergeben."
 url: "https://github.com/magicx78/ha-scanservjs-addon"
@@ -41,9 +41,20 @@ options:
   anthropic_api_key: ""
   paperless_url: "http://ca5234a0-paperless-ngx:8000"
   paperless_token: ""
-  ha_notify_target: "notify.persistent_notification"
   min_konfidenz: 0.7
   ai_poll_interval: 5
+
+  # --- Home Assistant Integration --------------------------------
+  ha_url: "http://homeassistant.local:8123"
+  ha_token: ""
+  ha_notify_target: "notify.persistent_notification"
+  ha_automation_entity_id: ""
+
+  # --- Caching (Performance) -------------------------------------
+  cache_enabled: true
+  cache_db_path: "/data/cache_classifications.db"
+  cache_ttl_seconds: 86400
+  redis_url: ""
 
   # --- Datenfresser (Folder Watcher) --------------------------------
   datenfresser_enabled: true
@@ -95,9 +106,20 @@ schema:
   anthropic_api_key: str?
   paperless_url: str?
   paperless_token: str?
-  ha_notify_target: str?
   min_konfidenz: float?
   ai_poll_interval: int?
+
+  # --- Home Assistant Integration --------------------------------
+  ha_url: str?
+  ha_token: str?
+  ha_notify_target: str?
+  ha_automation_entity_id: str?
+
+  # --- Caching (Performance) -------------------------------------
+  cache_enabled: bool?
+  cache_db_path: str?
+  cache_ttl_seconds: int?
+  redis_url: str?
 
   # --- Datenfresser (Folder Watcher) --------------------------------
   datenfresser_enabled: bool?

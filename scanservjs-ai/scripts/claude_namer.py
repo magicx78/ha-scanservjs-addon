@@ -5,18 +5,32 @@ Zwei separate API-Calls:
   1. Tags-Kontext  : extrahiert Tags, Person, Firma, Konfidenz
   2. Dateinamen-Kontext: extrahiert Datum, Kategorie, Beschreibung
 
+Caching:
+  - MD5-Hash des OCR-Textes als Cache-Key
+  - SQLite Basis + optional Redis
+  - 24h TTL Standard
+
 Modell  : claude-haiku-4-5-20251001
 Timeout : 30 s
 Retries : 1 Retry mit vereinfachtem Prompt bei ungueltiger JSON-Antwort
 """
 
+import hashlib
 import json
 import logging
 import re
 import time
+from pathlib import Path
 from typing import Optional
 
 import anthropic
+
+SCRIPT_DIR = Path(__file__).parent
+
+try:
+    from cache_manager import HybridCache  # noqa: E402
+except ImportError:
+    HybridCache = None
 
 # ---------------------------------------------------------------------------
 # Konstanten
@@ -108,9 +122,22 @@ FALLBACK_RESULT: dict = {
 # ---------------------------------------------------------------------------
 
 class ClaudeNamer:
-    def __init__(self, config: dict, logger: logging.Logger) -> None:
+    def __init__(self, config: dict, logger: logging.Logger, redis_client=None) -> None:
         self.logger = logger
         self.client = anthropic.Anthropic(api_key=config["anthropic_api_key"])
+
+        # Cache initialisieren
+        self.cache = None
+        if HybridCache:
+            try:
+                cache_db_path = Path(config.get("cache_db_path", "/data/cache_classifications.db"))
+                cache_enabled = config.get("cache_enabled", True)
+                if cache_enabled:
+                    self.cache = HybridCache(cache_db_path, logger, redis_client=redis_client)
+                    self.cache_ttl = int(config.get("cache_ttl_seconds", 86400))
+                    self.logger.info(f"Classification-Cache aktiviert: {cache_db_path}")
+            except Exception as exc:
+                self.logger.warning(f"Cache-Initialisierung fehlgeschlagen: {exc}")
 
     def classify(self, ocr_text: str) -> dict:
         """Klassifiziert ein Dokument mit zwei separaten Claude-Calls.
@@ -118,7 +145,15 @@ class ClaudeNamer:
         Call 1: Tags, Person, Firma, Konfidenz
         Call 2: Datum, Kategorie, Beschreibung
         Gibt bei Dauerfehler FALLBACK_RESULT zurueck.
+        Nutzt Cache wenn konfiguriert.
         """
+        # Cache-Check
+        if self.cache:
+            input_hash = hashlib.md5(ocr_text.encode()).hexdigest()
+            cached = self.cache.get(input_hash)
+            if cached:
+                return cached["result"]
+
         tags_result = self._call_with_retry(
             ocr_text, SYSTEM_PROMPT_TAGS, ["tags", "person", "firma", "konfidenz"],
             context="Tags"
@@ -138,6 +173,12 @@ class ClaudeNamer:
             result.update({k: tags_result[k] for k in ("tags", "person", "firma", "konfidenz") if k in tags_result})
 
         self._normalize(result)
+
+        # Cache speichern
+        if self.cache:
+            input_hash = hashlib.md5(ocr_text.encode()).hexdigest()
+            self.cache.set(input_hash, result, ttl_seconds=self.cache_ttl)
+
         return result
 
     def _call_with_retry(self, ocr_text: str, system_prompt: str, required_fields: list, context: str) -> Optional[dict]:
