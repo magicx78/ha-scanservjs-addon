@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.1.0] - 2026-03-22
+
+### Testing
+- **Unit-Tests für HybridCache (PERF-501 Validation):**
+  - 12 Unit-Tests für SQLite-Cache + Redis-Mock
+  - 8 SQLite-Tests: init, get/set, TTL-Expiry, cleanup, invalidate
+  - 4 Redis-Tests: HIT, Fallback, Error-Handling, no-Redis-mode
+  - @pytest.mark.unit, @pytest.mark.slow, @pytest.mark.mock Markers
+  - Alle kritischen Branches abgedeckt für >80% Coverage-Target
+
+- **conftest.py Erweiterung:**
+  - Neue Fixture `mock_redis_client` für Cache-Tests
+  - Wiederverwendet: `mock_logger`, `temp_db_path`
+
+### Changed
+- Version: 2.0.0 → 2.1.0 (Test-Suite hinzugefügt)
+
 ## [2.0.0] - 2026-03-22
 
 ### Added
