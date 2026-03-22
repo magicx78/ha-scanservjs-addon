@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.5.0] - 2026-03-22
+
+### Added
+- **Datenfresser Duplikat-Tagging (DF-501):**
+  - Duplikate werden nun auch zu consume/ verarbeitet (nicht nur zu duplicates/)
+  - JSON-Marker mit `is_duplicate: true` + Original-Referenz
+  - auto_consume.py erkennt Duplikate und setzt nur [Duplikat]-Tag
+  - Duplikate jetzt in Paperless trackbar und taggbar
+
+### Improved
+- **poll_new_docs.py Error-Handling (PW-501):**
+  - Intelligente Retry-Logik mit exponential backoff (15s → 30s → 60s → 120s max)
+  - Spezifisches Exception-Handling für verschiedene Fehlertypen:
+    - Timeout: Retry mit Backoff
+    - Connection Error: Retry mit Backoff
+    - Auth Error (401/403): Kein Retry (permanent)
+    - Server Error (5xx): Retry mit Backoff
+  - Konfigurierbare Max-Retries + Request-Timeout
+  - Strukturiertes Logging für HA-Integration
+  - Graceful Degradation bei permanenten Fehlern
+
+### Testing
+- **Unit-Tests Setup (TEST-501):**
+  - 23 Unit-Tests für 3 Kern-Module (claude_namer, paperless_api, duplicate_check)
+  - >80% Code-Coverage Ziel
+  - 100% Mocked (keine echten API-Calls)
+  - pytest + Coverage-Konfiguration
+  - Makefile für Test-Kommandos
+  - CI/CD Ready (GitHub Actions prepared)
+
+### Changed
+- poll_new_docs.py: Strukturiertes Logging statt print()
+- Tests sind produktionsreif für Docker-Integration
+
 ## [1.4.0] - 2026-03-22
 
 ### Added
