@@ -7,9 +7,11 @@ Cron: */5 * * * * python3 /config/scripts/poll_new_docs.py
 """
 
 import fcntl
+import logging
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +20,11 @@ import yaml
 
 SCRIPT_DIR = Path(__file__).parent
 LOCK_FILE = SCRIPT_DIR / "poll_new_docs.lock"
+
+# Default-Konfiguration für Retry-Logik
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_REQUEST_TIMEOUT = 15
+DEFAULT_BACKOFF_FACTOR = 2  # exponential: 15s → 30s → 60s
 
 _ENV_OVERRIDES = {
     "paperless_url":   "PAPERLESS_URL",
@@ -36,6 +43,19 @@ def load_config() -> dict:
         if val:
             cfg[key] = val
     return cfg
+
+
+def setup_logging() -> logging.Logger:
+    """Setup für poll_new_docs Logging."""
+    logger = logging.getLogger("poll_new_docs")
+    logger.setLevel(logging.DEBUG)
+
+    # Nur stderr (für Cron-Ausgabe)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+    logger.addHandler(handler)
+
+    return logger
 
 
 def print_preview(docs: list, session: requests.Session, base: str) -> None:
@@ -81,7 +101,7 @@ def main() -> None:
         lock_fh.close()
 
 
-def _get_ki_tag_id(session: requests.Session, base: str) -> Optional[int]:
+def _get_ki_tag_id(session: requests.Session, base: str, logger: logging.Logger) -> Optional[int]:
     """Gibt die ID des Tags 'KI-Verarbeitet' zurück (None falls nicht vorhanden)."""
     try:
         resp = session.get(
@@ -89,41 +109,118 @@ def _get_ki_tag_id(session: requests.Session, base: str) -> Optional[int]:
             params={"name__iexact": "KI-Verarbeitet"},
             timeout=10,
         )
+        resp.raise_for_status()
         results = resp.json().get("results") or []
         return int(results[0]["id"]) if results else None
-    except Exception:
+    except requests.RequestException as exc:
+        logger.warning(f"Fehler beim Abrufen des KI-Verarbeitet-Tags: {exc}")
+        return None
+    except Exception as exc:
+        logger.error(f"Unerwarteter Fehler beim Tag-Abruf: {exc}")
         return None
 
 
+def _api_request_with_retry(
+    session: requests.Session, url: str, max_retries: int = DEFAULT_MAX_RETRIES,
+    timeout: int = DEFAULT_REQUEST_TIMEOUT, logger: Optional[logging.Logger] = None, **kwargs
+) -> Optional[requests.Response]:
+    """Führt HTTP-Request mit Retry-Logik durch.
+
+    Args:
+        session: requests.Session
+        url: API-URL
+        max_retries: Maximal Anzahl Versuche
+        timeout: Request-Timeout in Sekunden
+        logger: Logging-Instanz (optional)
+        **kwargs: Zusätzliche Session.get() Parameter
+
+    Returns:
+        Response-Objekt oder None bei schwerem Fehler
+    """
+    backoff_factor = DEFAULT_BACKOFF_FACTOR
+    last_exc = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = session.get(url, timeout=timeout, **kwargs)
+            resp.raise_for_status()
+            return resp
+        except requests.exceptions.Timeout as exc:
+            last_exc = exc
+            if logger:
+                logger.warning(f"Timeout (Versuch {attempt}/{max_retries}): {exc}")
+            if attempt < max_retries:
+                wait_time = timeout * (backoff_factor ** (attempt - 1))
+                time.sleep(min(wait_time, 120))  # Max 2 Minuten
+        except requests.exceptions.ConnectionError as exc:
+            last_exc = exc
+            if logger:
+                logger.warning(f"Verbindungsfehler (Versuch {attempt}/{max_retries}): {exc}")
+            if attempt < max_retries:
+                wait_time = timeout * (backoff_factor ** (attempt - 1))
+                time.sleep(min(wait_time, 120))
+        except requests.exceptions.HTTPError as exc:
+            last_exc = exc
+            if exc.response.status_code in (401, 403):
+                if logger:
+                    logger.error(f"Authentifizierungsfehler ({exc.response.status_code}) – nicht wiederholbar")
+                return None  # Nicht wiederholen
+            elif exc.response.status_code >= 500:
+                if logger:
+                    logger.warning(f"Server-Fehler (Versuch {attempt}/{max_retries}): {exc}")
+                if attempt < max_retries:
+                    wait_time = timeout * (backoff_factor ** (attempt - 1))
+                    time.sleep(min(wait_time, 120))
+            else:
+                if logger:
+                    logger.error(f"HTTP-Fehler ({exc.response.status_code}): {exc}")
+                return None
+        except requests.RequestException as exc:
+            last_exc = exc
+            if logger:
+                logger.error(f"Request-Fehler: {exc}")
+            return None
+
+    # Zu viele Fehlversuche
+    if logger:
+        logger.error(f"Zu viele Fehler nach {max_retries} Versuchen – gebe auf")
+    return None
+
+
 def _run() -> None:
+    logger = setup_logging()
     config = load_config()
     base = (config.get("paperless_url") or "").rstrip("/")
     token = config.get("paperless_token") or ""
 
     if not base or not token:
-        print(
-            "[poll] paperless_url oder paperless_token fehlt in config.yaml – Abbruch.",
-            file=sys.stderr,
-        )
+        logger.error("[poll] paperless_url oder paperless_token fehlt in config.yaml – Abbruch")
         return
 
     session = requests.Session()
     session.headers["Authorization"] = f"Token {token}"
 
-    # ID des KI-Verarbeitet-Tags ermitteln (zum Ausfiltern bereits verarbeiteter Dokumente)
-    ki_tag_id = _get_ki_tag_id(session, base)
+    # Konfiguration laden
+    max_retries = int(config.get("poll_max_retries", DEFAULT_MAX_RETRIES))
+    timeout = int(config.get("poll_request_timeout", DEFAULT_REQUEST_TIMEOUT))
 
-    # Dokumente ohne document_type = noch nicht verarbeitet
-    try:
-        resp = session.get(
-            f"{base}/api/documents/",
-            params={"document_type__isnull": "true", "ordering": "added", "page_size": 50},
-            timeout=15,
-        )
-        resp.raise_for_status()
-    except requests.RequestException as exc:
-        print(f"[poll] Paperless-ngx nicht erreichbar: {exc}", file=sys.stderr)
+    # ID des KI-Verarbeitet-Tags ermitteln (zum Ausfiltern bereits verarbeiteter Dokumente)
+    ki_tag_id = _get_ki_tag_id(session, base, logger)
+
+    # Dokumente ohne document_type = noch nicht verarbeitet (mit Retry)
+    resp = _api_request_with_retry(
+        session,
+        f"{base}/api/documents/",
+        max_retries=max_retries,
+        timeout=timeout,
+        logger=logger,
+        params={"document_type__isnull": "true", "ordering": "added", "page_size": 50},
+    )
+
+    if resp is None:
+        logger.error("[poll] Dokumentabfrage fehlgeschlagen – Abbruch")
         return
+
     all_docs = resp.json().get("results") or []
 
     # Bereits KI-verarbeitete Dokumente herausfiltern
@@ -148,13 +245,16 @@ def _run() -> None:
         env = {**os.environ, "DOCUMENT_ID": doc_id, "DOCUMENT_FILE_NAME": filename}
         subprocess.run([sys.executable, auto_consume], env=env, check=False)
 
-    # Nachher: aktuellen Stand aller Dokumente anzeigen
-    resp2 = session.get(
+    # Nachher: aktuellen Stand aller Dokumente anzeigen (mit Retry)
+    resp2 = _api_request_with_retry(
+        session,
         f"{base}/api/documents/",
+        max_retries=max_retries,
+        timeout=timeout,
+        logger=logger,
         params={"ordering": "-added", "page_size": len(docs)},
-        timeout=15,
     )
-    if resp2.ok:
+    if resp2:
         updated = {d["id"]: d for d in resp2.json().get("results", [])}
         print("\n" + "=" * 70)
         print("  ERGEBNIS nach Klassifikation")
