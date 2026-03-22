@@ -94,3 +94,13 @@ def mock_requests_session():
     session.get = MagicMock()
     session.post = MagicMock()
     return session
+
+
+@pytest.fixture
+def mock_redis_client():
+    """Mock redis.Redis Client für Cache-Tests."""
+    redis = MagicMock()
+    redis.get.return_value = None  # Default: Cache Miss
+    redis.setex.return_value = True
+    redis.delete.return_value = 1
+    return redis
