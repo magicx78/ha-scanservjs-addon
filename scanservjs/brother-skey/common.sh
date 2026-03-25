@@ -164,7 +164,7 @@ append_skey_args() {
   if [[ -n "${source:-}" ]]; then
     args_ref+=("--source" "${source}")
   else
-    args_ref+=("--source" "FB")
+    args_ref+=("--source" "${BROTHER_SCAN_SOURCE:-FB}")
   fi
 
   if [[ -n "${size:-}" ]]; then
@@ -371,6 +371,85 @@ copy_scan_output() {
   fi
 }
 
+scan_batch_from_adf() {
+  # Scannt alle Seiten vom ADF via scanimage --batch und fasst sie zu einem PDF zusammen.
+  # Gibt den Pfad zur fertigen Output-Datei auf stdout aus.
+  # Exit-Code 7 von scanimage = "no more pages" = normal bei ADF.
+  local device="$1"
+  local output_file="$2"
+  local resolution="${BROTHER_BUTTON_DEFAULT_RESOLUTION:-300}"
+  local tmpdir page_count exit_code
+
+  # Profil-Config laden fuer Resolution
+  if [[ -n "${resolution:-}" ]]; then
+    :
+  fi
+
+  tmpdir="$(mktemp -d /tmp/brother_batch_XXXXXX)"
+
+  button_log "info" "ADF batch scan start device=${device} resolution=${resolution} tmpdir=${tmpdir}"
+
+  exit_code=0
+  scanimage \
+    --device-name="${device}" \
+    --source="ADF" \
+    --format=tiff \
+    --resolution="${resolution}" \
+    -l 0 -t 0 -x 210 -y 297 \
+    --batch="${tmpdir}/page_%04d.tif" 2>>"${BROTHER_BUTTON_LOG_FILE}" || exit_code=$?
+
+  # Exit-Code 7 = "no more pages" (ADF leer) = OK
+  if [[ "${exit_code}" -ne 0 && "${exit_code}" -ne 7 ]]; then
+    button_log "error" "ADF batch scanimage failed exit=${exit_code}"
+    rm -rf "${tmpdir}"
+    return 1
+  fi
+
+  # Gescannte Seiten zaehlen
+  local -a pages=()
+  shopt -s nullglob
+  pages=("${tmpdir}"/page_*.tif)
+  shopt -u nullglob
+
+  page_count="${#pages[@]}"
+  button_log "info" "ADF batch scan completed pages=${page_count}"
+
+  if [[ "${page_count}" -eq 0 ]]; then
+    button_log "error" "ADF batch scan produced 0 pages"
+    rm -rf "${tmpdir}"
+    return 1
+  fi
+
+  if [[ "${page_count}" -eq 1 ]]; then
+    # Einzelne Seite — direkt als Output verwenden
+    mv "${pages[0]}" "${output_file%.*}.tif"
+    rm -rf "${tmpdir}"
+    printf '%s\n' "${output_file%.*}.tif"
+    return 0
+  fi
+
+  # Mehrere Seiten — zu PDF zusammenfassen
+  local pdf_output="${output_file%.*}.pdf"
+  if command -v convert >/dev/null 2>&1; then
+    if convert "${pages[@]}" -strip -compress jpeg -quality 90 "${pdf_output}" \
+       >>"${BROTHER_BUTTON_LOG_FILE}" 2>&1 && [[ -s "${pdf_output}" ]]; then
+      button_log "info" "ADF batch merged ${page_count} pages into ${pdf_output}"
+      rm -rf "${tmpdir}"
+      printf '%s\n' "${pdf_output}"
+      return 0
+    fi
+    button_log "warn" "ADF batch convert failed, falling back to first page"
+  else
+    button_log "warn" "convert not found, using first page only"
+  fi
+
+  # Fallback: nur erste Seite
+  mv "${pages[0]}" "${output_file%.*}.tif"
+  rm -rf "${tmpdir}"
+  printf '%s\n' "${output_file%.*}.tif"
+  return 0
+}
+
 scan_via_profile() {
   local profile="$1"
   local requested_device="${2:-}"
@@ -390,6 +469,39 @@ scan_via_profile() {
     exit 1
   fi
 
+  # --- ADF Multi-Page Batch-Scan -------------------------------------------
+  if [[ "${BROTHER_SCAN_SOURCE:-FB}" == "ADF" ]]; then
+    output_file="${output_dir}/button_${profile}_$(button_timestamp).tif"
+    local batch_output
+    if batch_output="$(scan_batch_from_adf "${device}" "${output_file}")"; then
+      output_file="${batch_output}"
+    else
+      button_log "error" "ADF batch scan failed for profile=${profile}"
+      exit 1
+    fi
+
+    if [[ ! -s "${output_file}" ]]; then
+      rm -f "${output_file}"
+      button_log "error" "empty output file profile=${profile} output=${output_file}"
+      exit 1
+    fi
+
+    final_output_file="${output_file}"
+    # PDF vom Batch braucht keine weitere Konvertierung
+    if [[ "${output_file}" != *.pdf ]]; then
+      if converted_output_file="$(convert_profile_output "${profile}" "${output_file}")"; then
+        final_output_file="${converted_output_file}"
+      fi
+    fi
+
+    copy_scan_output "${final_output_file}" "${profile}"
+    button_log "info" "scan saved profile=${profile} output=${final_output_file} size=$(wc -c <"${final_output_file}" 2>/dev/null || printf '0')"
+    BROTHER_LAST_OUTPUT_FILE="${final_output_file}"
+    export BROTHER_LAST_OUTPUT_FILE
+    return 0
+  fi
+
+  # --- Single-Page Scan (Flachbett) ----------------------------------------
   if [[ -x "/opt/brother/scanner/brscan-skey/skey-scanimage" ]]; then
     skey_bin="/opt/brother/scanner/brscan-skey/skey-scanimage"
     format="tiff"

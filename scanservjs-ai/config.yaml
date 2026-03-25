@@ -1,5 +1,5 @@
 name: "scanservjs + KI (Paperless-AI)"
-version: "2.2.1"
+version: "2.3.0"
 slug: "scanservjs_ai"
 description: "Scanner Web-UI mit automatischer KI-Dokumentenklassifikation. Scans landen direkt in Paperless-ngx – Titel, Tags und Korrespondenten werden automatisch per Claude AI vergeben."
 url: "https://github.com/magicx78/ha-scanservjs-addon"
@@ -92,6 +92,7 @@ options:
   brother_scanner_nodename: ""
   brother_overwrite_existing: false
   brother_button_output_dir: ""
+  brother_scan_source: "ADF"
   brother_button_default_resolution: 300
   brother_button_scan_format: "jpeg"
   brother_image_output_format: "jpg"
@@ -161,6 +162,7 @@ schema:
   brother_scanner_nodename: str?
   brother_overwrite_existing: bool?
   brother_button_output_dir: str?
+  brother_scan_source: list(FB|ADF)?
   brother_button_default_resolution: int?
   brother_button_scan_format: str?
   brother_image_output_format: list(native|jpg|pdf|tiff)?

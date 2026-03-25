@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.3.0] - 2026-03-25
+
+### Added
+- **Multi-Page ADF-Scan:** Brother OCR/File/Email-Button scannt jetzt alle Seiten vom ADF und fasst sie automatisch zu einem PDF zusammen
+  - Neue Config-Option `brother_scan_source: "ADF"` (Standard) vs. `"FB"` (Flachbett)
+  - `scanimage --batch` mit automatischer Exit-Code-7-Erkennung ("ADF leer")
+  - ImageMagick-Merge: Einzelseiten-TIFFs → ein Multi-Page-PDF
+  - Fallback bei 1 Seite: normales Single-Page-Verhalten
+  - MFC-L2700DW ADF fasst bis zu 35 Seiten
+
 ## [2.2.1] - 2026-03-25
 
 ### Fixed
