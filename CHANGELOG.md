@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.3.4] - 2026-03-25
+
+### Fixed
+- **Scans nicht umgewandelt/kopiert:** ImageMagick (`convert`) fehlte im Docker-Image. TIFF→PDF-Konvertierung und Multi-Page-Merge schlugen still fehl. ImageMagick jetzt in beiden Dockerfiles (AI + non-AI) installiert.
+- **ImageMagick PDF-Policy:** Standard-Policy blockiert PDF-Erzeugung — `policy.xml` wird im Dockerfile entsperrt.
+
 ## [2.3.3] - 2026-03-25
 
 ### Fixed

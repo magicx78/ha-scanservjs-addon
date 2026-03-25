@@ -13,9 +13,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         jq curl ca-certificates libusb-0.1-4 sane-airscan iproute2 \
         python3 python3-pip python3-venv cron \
-        tesseract-ocr tesseract-ocr-deu ocrmypdf poppler-utils \
+        tesseract-ocr tesseract-ocr-deu ocrmypdf poppler-utils imagemagick \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && if [ -f /etc/ImageMagick-6/policy.xml ]; then \
+         sed -i 's|<policy domain="coder" rights="none" pattern="PDF"|<policy domain="coder" rights="read\|write" pattern="PDF"|g' /etc/ImageMagick-6/policy.xml; \
+       fi
 
 # Bashio
 RUN curl -fsSL -o /tmp/bashio.tar.gz "https://github.com/hassio-addons/bashio/archive/${BASHIO_VERSION}.tar.gz" \
