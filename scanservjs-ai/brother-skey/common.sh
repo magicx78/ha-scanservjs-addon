@@ -397,20 +397,15 @@ detect_adf_source() {
 }
 
 scan_multipage() {
-  # Multi-Page-Scan: ADF (automatisch) oder Flachbett (zeitbasiert).
+  # Multi-Page-Scan ueber ADF.
   # Gibt den Pfad zur fertigen Output-Datei auf stdout aus.
   #
-  # Modus 1 — ADF: scanimage --batch, scannt bis ADF leer
-  # Modus 2 — Flachbett: scannt eine Seite, wartet BROTHER_MULTIPAGE_WAIT Sekunden,
-  #           prueft ob Markierungsdatei existiert (naechster Button-Druck), scannt weiter
-  #
-  # Exit-Code 7 von scanimage = "no more pages" = normal bei ADF.
+  # ADF: scanimage --batch, scannt bis ADF leer (Exit-Code 7 = normal).
+  # Fallback bei ADF-Fehler: Einzelseite vom Flachbett.
   local device="$1"
   local output_file="$2"
   local resolution="${BROTHER_BUTTON_DEFAULT_RESOLUTION:-300}"
-  local wait_seconds="${BROTHER_MULTIPAGE_WAIT:-30}"
-  local tmpdir page_count exit_code page_num adf_source
-  local continue_file="/tmp/brother_scan_continue"
+  local tmpdir exit_code adf_source
 
   tmpdir="$(mktemp -d /tmp/brother_batch_XXXXXX)"
 
@@ -429,7 +424,7 @@ scan_multipage() {
 
     # Exit-Code 7 = "no more pages" (ADF leer) = OK
     if [[ "${exit_code}" -ne 0 && "${exit_code}" -ne 7 ]]; then
-      button_log "warn" "ADF scan failed exit=${exit_code}, trying flatbed multipage"
+      button_log "warn" "ADF scan failed exit=${exit_code}, falling back to single flatbed page"
     else
       # ADF hat funktioniert — Seiten zaehlen
       local -a pages=()
@@ -441,71 +436,18 @@ scan_multipage() {
         _merge_pages "${tmpdir}" "${output_file}" "${#pages[@]}"
         return $?
       fi
-      button_log "warn" "ADF produced 0 pages, trying flatbed multipage"
+      button_log "warn" "ADF produced 0 pages, falling back to single flatbed page"
     fi
   else
-    button_log "info" "no ADF detected, using flatbed multipage mode"
+    button_log "info" "no ADF detected, falling back to single flatbed page"
   fi
 
-  # --- Flachbett Multi-Page mit Wartezeit ---
-  button_log "info" "flatbed multipage start device=${device} wait=${wait_seconds}s"
-  rm -f "${continue_file}"
-  page_num=1
-
-  while true; do
-    local page_file="${tmpdir}/page_$(printf '%04d' ${page_num}).tif"
-
-    exit_code=0
-    scanimage \
-      --device-name="${device}" \
-      --source="${BROTHER_SCAN_SOURCE:-FB}" \
-      --format=tiff \
-      --resolution="${resolution}" \
-      >"${page_file}" 2>>"${BROTHER_BUTTON_LOG_FILE}" || exit_code=$?
-
-    if [[ "${exit_code}" -ne 0 || ! -s "${page_file}" ]]; then
-      rm -f "${page_file}"
-      if [[ "${page_num}" -eq 1 ]]; then
-        button_log "error" "first page scan failed exit=${exit_code}"
-        rm -rf "${tmpdir}"
-        return 1
-      fi
-      button_log "info" "scan stopped at page ${page_num} (exit=${exit_code})"
-      break
-    fi
-
-    button_log "info" "flatbed page ${page_num} scanned"
-
-    # Signal fuer "naechste Seite": Touch-Datei
-    # Der naechste Button-Druck erzeugt /tmp/brother_scan_continue
-    rm -f "${continue_file}"
-    touch "/tmp/brother_scan_waiting"
-    button_log "info" "waiting ${wait_seconds}s for next page (touch ${continue_file} or press button again)"
-
-    local waited=0
-    local should_continue=false
-    while [[ "${waited}" -lt "${wait_seconds}" ]]; do
-      sleep 1
-      waited=$((waited + 1))
-      if [[ -f "${continue_file}" ]]; then
-        should_continue=true
-        rm -f "${continue_file}"
-        button_log "info" "continue signal received after ${waited}s"
-        break
-      fi
-    done
-    rm -f "/tmp/brother_scan_waiting"
-
-    if [[ "${should_continue}" != "true" ]]; then
-      button_log "info" "no continue signal after ${wait_seconds}s, finishing with ${page_num} pages"
-      break
-    fi
-
-    page_num=$((page_num + 1))
-  done
-
-  _merge_pages "${tmpdir}" "${output_file}" "${page_num}"
-  return $?
+  # --- Fallback: Einzelseite vom Flachbett ---
+  # Rueckgabe "" signalisiert dem Aufrufer: kein Batch-Ergebnis,
+  # soll normalen Single-Page-Pfad (mit skey-scanimage falls vorhanden) nutzen.
+  button_log "info" "ADF unavailable, delegating to single-page scan path"
+  rm -rf "${tmpdir}"
+  return 2
 }
 
 _merge_pages() {
@@ -575,36 +517,45 @@ scan_via_profile() {
     exit 1
   fi
 
-  # --- Multi-Page Scan (ADF oder Flachbett mit Wartezeit) --------------------
+  # --- Multi-Page Scan (ADF) ------------------------------------------------
+  # Bei ADF-Modus: versuche ADF-Batch-Scan.
+  # Return-Code 2 = ADF nicht verfuegbar → weiter zum normalen Single-Page-Pfad
+  # Return-Code 1 = Scan-Fehler → Abbruch
+  # Return-Code 0 = Erfolg → fertig
   if [[ "${BROTHER_SCAN_SOURCE:-FB}" == "ADF" ]]; then
     output_file="${output_dir}/button_${profile}_$(button_timestamp).tif"
-    local batch_output
-    if batch_output="$(scan_multipage "${device}" "${output_file}")"; then
+    local batch_output batch_rc=0
+    batch_output="$(scan_multipage "${device}" "${output_file}")" || batch_rc=$?
+
+    if [[ "${batch_rc}" -eq 0 && -n "${batch_output}" ]]; then
+      # ADF Batch hat funktioniert
       output_file="${batch_output}"
+
+      if [[ ! -s "${output_file}" ]]; then
+        rm -f "${output_file}"
+        button_log "error" "empty output file profile=${profile} output=${output_file}"
+        exit 1
+      fi
+
+      final_output_file="${output_file}"
+      if [[ "${output_file}" != *.pdf ]]; then
+        if converted_output_file="$(convert_profile_output "${profile}" "${output_file}")"; then
+          final_output_file="${converted_output_file}"
+        fi
+      fi
+
+      copy_scan_output "${final_output_file}" "${profile}"
+      button_log "info" "scan saved profile=${profile} output=${final_output_file} size=$(wc -c <"${final_output_file}" 2>/dev/null || printf '0')"
+      BROTHER_LAST_OUTPUT_FILE="${final_output_file}"
+      export BROTHER_LAST_OUTPUT_FILE
+      return 0
+    elif [[ "${batch_rc}" -eq 2 ]]; then
+      # ADF nicht verfuegbar → weiter zum Single-Page-Pfad (skey-scanimage)
+      button_log "info" "ADF fallback: using standard single-page scan for profile=${profile}"
     else
       button_log "error" "multipage scan failed for profile=${profile}"
       exit 1
     fi
-
-    if [[ ! -s "${output_file}" ]]; then
-      rm -f "${output_file}"
-      button_log "error" "empty output file profile=${profile} output=${output_file}"
-      exit 1
-    fi
-
-    final_output_file="${output_file}"
-    # PDF vom Batch braucht keine weitere Konvertierung
-    if [[ "${output_file}" != *.pdf ]]; then
-      if converted_output_file="$(convert_profile_output "${profile}" "${output_file}")"; then
-        final_output_file="${converted_output_file}"
-      fi
-    fi
-
-    copy_scan_output "${final_output_file}" "${profile}"
-    button_log "info" "scan saved profile=${profile} output=${final_output_file} size=$(wc -c <"${final_output_file}" 2>/dev/null || printf '0')"
-    BROTHER_LAST_OUTPUT_FILE="${final_output_file}"
-    export BROTHER_LAST_OUTPUT_FILE
-    return 0
   fi
 
   # --- Single-Page Scan (Flachbett) ----------------------------------------

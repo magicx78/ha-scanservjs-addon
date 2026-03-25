@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.2] - 2026-03-25
+
+### Fixed
+- **Flachbett Multi-Page entfernt:** Brother-Scanner blockiert Tasten waehrend brscan-skey laeuft — Multi-Page per Button-Druck nicht moeglich. Flachbett scannt jetzt zuverlaessig eine Einzelseite.
+- **Signal-Datei-Logik entfernt:** `/tmp/brother_scan_waiting` und `/tmp/brother_scan_continue` Mechanismus aus allen 4 Button-Scripts entfernt (funktionierte nicht, da Scanner-Display "Scannen" zeigt und Tasten sperrt)
+- **ADF Fallback verbessert:** Bei ADF-Fehler oder fehlendem ADF wird jetzt sauber auf eine Einzelseite Flachbett zurueckgefallen
+
 ## [2.3.1] - 2026-03-25
 
 ### Fixed
