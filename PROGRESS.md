@@ -2,16 +2,17 @@
 
 **Repo:** https://github.com/magicx78/ha-scanservjs-addon
 **Branch:** `main`
-**Aktuelle Version:** `2.3.0`
+**Aktuelle Version:** `2.3.3`
 **Stand:** 2026-03-25
-**Letzter Commit:** `df3d91c`
+**Letzter Commit:** `762919c`
 
 ---
 
 ## Status: Stabil & validiert
 
-Addon v2.3.0 gebaut, alle 37 Unit-Tests bestehen, alle Config-Felder durchgereicht,
+Addon v2.3.3 gebaut, alle 37 Unit-Tests bestehen, alle Config-Felder durchgereicht,
 alle Translations vollstaendig (de + en). Keine Secrets im Repo.
+HACS-kompatibel, GitHub Release vorhanden.
 
 Scanner: Brother MFC-L2700DW (Netzwerk), ADF Multi-Page aktiv.
 
@@ -21,7 +22,7 @@ Scanner: Brother MFC-L2700DW (Netzwerk), ADF Multi-Page aktiv.
 
 | Komponente | Status |
 |-----------|--------|
-| Docker Build v2.3.0 | OK |
+| Docker Build v2.3.3 | OK |
 | scanservjs Web-UI (Port 8080) | OK |
 | Brother MFC-L2700DW (`brother4:net1;dev0`) | OK |
 | ADF Multi-Page Batch-Scan | OK (neu in v2.3.0) |
@@ -40,6 +41,9 @@ Scanner: Brother MFC-L2700DW (Netzwerk), ADF Multi-Page aktiv.
 
 | Version | Was |
 |---------|-----|
+| 2.3.3 | ADF-Fallback fix: source=FB erzwingen, HACS-Release, Badges, Bugfixes |
+| 2.3.2 | Flachbett Multi-Page entfernt (Scanner blockiert Tasten), Signal-Dateien entfernt |
+| 2.3.1 | ADF-Autodiscovery: detect_adf_source() erkennt korrekten Source-Namen automatisch |
 | 2.3.0 | Multi-Page ADF-Scan: Brother-Buttons scannen alle Seiten vom ADF, merge zu PDF |
 | 2.2.1 | HA-Sensoren Bugfix: falscher config.yaml Pfad, SUPERVISOR_TOKEN, unabhaengig von KI-Config |
 | 2.2.0 | Editierbare KI-Prompts, HA-Sensoren, Fehlerbehandlung, verbesserte KI-Beschriftung |
@@ -94,7 +98,7 @@ Scanner: Brother MFC-L2700DW (Netzwerk), ADF Multi-Page aktiv.
 ```
 scanservjs-ai/
 |-- Dockerfile
-|-- config.yaml             # v2.3.0, ~48 Optionen
+|-- config.yaml             # v2.3.3, ~50 Optionen
 |-- run.sh
 |-- brother-skey/
 |   |-- common.sh           # scan_batch_from_adf() + scan_via_profile()
@@ -127,10 +131,9 @@ scanservjs-ai/
 
 | # | Was | Prioritaet |
 |---|-----|-----------|
-| 1 | ADF Multi-Page E2E testen (3+ Seiten -> 1 PDF -> Paperless) | HOCH |
-| 2 | HA-Sensoren nach v2.3.0 Update pruefen | MITTEL |
-| 3 | End-to-End: Web-UI Scan -> KI -> Panels | MITTEL |
-| 4 | KI-Prompts anpassen und Ergebnis pruefen | NIEDRIG |
+| 1 | End-to-End: Web-UI Scan -> KI -> Panels | MITTEL |
+| 2 | KI-Prompts anpassen und Ergebnis pruefen | NIEDRIG |
+| 3 | aarch64 Support evaluieren | NIEDRIG |
 
 ---
 
@@ -146,7 +149,6 @@ scanservjs-ai/
 
 ## Naechste Schritte
 
-1. Update auf v2.3.0 in HA
-2. ADF testen: Mehrere Seiten einlegen -> OCR-Button -> PDF pruefen
-3. HA-Sensoren pruefen (Developer Tools -> States -> datenfresser)
-4. Log: `/tmp/scanservjs-brother-button.log` nach ADF-Scan
+1. HACS: Repo-URL in HACS als Custom Repository hinzufuegen und testen
+2. End-to-End Scan-Workflow validieren (Web-UI -> KI -> Paperless)
+3. KI-Prompts optimieren und Ergebnis pruefen

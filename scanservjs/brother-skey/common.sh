@@ -407,7 +407,10 @@ scan_multipage() {
   local resolution="${BROTHER_BUTTON_DEFAULT_RESOLUTION:-300}"
   local tmpdir exit_code adf_source
 
-  tmpdir="$(mktemp -d /tmp/brother_batch_XXXXXX)"
+  tmpdir="$(mktemp -d /tmp/brother_batch_XXXXXX)" || {
+    button_log "error" "mktemp failed – cannot create temporary directory"
+    return 1
+  }
 
   # --- Versuche ADF ---
   adf_source=""

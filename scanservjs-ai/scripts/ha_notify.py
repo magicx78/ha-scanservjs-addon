@@ -89,7 +89,7 @@ class HANotifier:
                 timeout=10,
             )
             resp.raise_for_status()
-            self.logger.debug(f"HA-Automation getrggert: {self.automation_entity_id!r}")
+            self.logger.debug(f"HA-Automation getriggert: {self.automation_entity_id!r}")
         except requests.RequestException as exc:
             self.logger.warning(f"HA-Automation Trigger fehlgeschlagen: {exc}")
 
@@ -111,3 +111,8 @@ class HANotifier:
         except requests.RequestException as exc:
             # Fehler hier darf den Hauptfluss nicht unterbrechen
             self.logger.warning(f"HA-Benachrichtigung fehlgeschlagen: {exc}")
+
+    def close(self) -> None:
+        """Session sauber schliessen."""
+        if hasattr(self, "session"):
+            self.session.close()

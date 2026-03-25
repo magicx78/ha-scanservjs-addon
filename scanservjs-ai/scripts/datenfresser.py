@@ -621,6 +621,8 @@ def main() -> None:
         sys.exit(1)
 
     finally:
+        if notifier:
+            notifier.close()
         if lock_fh:
             fcntl.flock(lock_fh, fcntl.LOCK_UN)
             lock_fh.close()

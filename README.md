@@ -4,6 +4,8 @@
 
 [![Add this repository to your Home Assistant instance](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fmagicx78%2Fha-scanservjs-addon)
 [![Open this add-on in your Home Assistant instance](https://my.home-assistant.io/badges/supervisor_addon.svg)](https://my.home-assistant.io/redirect/supervisor_addon/?addon=9ca70578_scanservjs&repository_url=https%3A%2F%2Fgithub.com%2Fmagicx78%2Fha-scanservjs-addon)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
+[![Build](https://github.com/magicx78/ha-scanservjs-addon/actions/workflows/build.yml/badge.svg)](https://github.com/magicx78/ha-scanservjs-addon/actions/workflows/build.yml)
 
 ## Purpose
 

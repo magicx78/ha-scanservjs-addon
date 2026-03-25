@@ -57,4 +57,7 @@ RUN for html in \
 
 EXPOSE 8080
 
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -sf http://localhost:8080/ || exit 1
+
 ENTRYPOINT ["/usr/local/bin/run.sh"]

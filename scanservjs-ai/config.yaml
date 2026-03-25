@@ -66,6 +66,8 @@ options:
   datenfresser_path: "/share/datenfresser/inbox"
   datenfresser_duplicates_path: "/share/datenfresser/duplicates"
   datenfresser_poll_interval: 30
+  datenfresser_errors_path: "/share/datenfresser/errors"
+  datenfresser_unsupported_path: "/share/datenfresser/unsupported"
 
   # --- Scanner ---------------------------------------------------
   saned_net_hosts: ""
@@ -138,6 +140,8 @@ schema:
   datenfresser_path: str?
   datenfresser_duplicates_path: str?
   datenfresser_poll_interval: int?
+  datenfresser_errors_path: str?
+  datenfresser_unsupported_path: str?
 
   # --- Scanner ---------------------------------------------------
   saned_net_hosts: str?

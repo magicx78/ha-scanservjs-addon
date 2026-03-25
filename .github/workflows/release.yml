@@ -22,9 +22,20 @@ jobs:
           set -euo pipefail
           tag="${GITHUB_REF_NAME#v}"
           version_file="$(tr -d '\r\n' < VERSION)"
-          addon_version="$(sed -n 's/^version: "\(.*\)"$/\1/p' scanservjs/config.yaml)"
+          addon_version_base="$(sed -n 's/^version: "\(.*\)"$/\1/p' scanservjs/config.yaml)"
+          addon_version_ai="$(sed -n 's/^version: "\(.*\)"$/\1/p' scanservjs-ai/config.yaml)"
+
+          echo "Tag: ${tag}"
+          echo "VERSION file: ${version_file}"
+          echo "scanservjs config: ${addon_version_base}"
+          echo "scanservjs-ai config: ${addon_version_ai}"
+
           test "${tag}" = "${version_file}"
-          test "${tag}" = "${addon_version}"
+          # Tag muss mit mindestens einer Addon-Version uebereinstimmen
+          if [[ "${tag}" != "${addon_version_base}" && "${tag}" != "${addon_version_ai}" ]]; then
+            echo "::error::Tag ${tag} matches neither scanservjs (${addon_version_base}) nor scanservjs-ai (${addon_version_ai})"
+            exit 1
+          fi
 
       - name: Ensure changelog entry exists
         shell: bash

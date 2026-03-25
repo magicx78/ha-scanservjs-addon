@@ -53,6 +53,12 @@ configuration:
   datenfresser_poll_interval:
     name: Datenfresser poll interval (seconds)
     description: "How often (in seconds) the inbox folder is checked. Default: 30."
+  datenfresser_errors_path:
+    name: Datenfresser errors path
+    description: "Path for files that failed OCR after multiple retries. Default: /share/datenfresser/errors"
+  datenfresser_unsupported_path:
+    name: Datenfresser unsupported path
+    description: "Path for files with unsupported formats. Default: /share/datenfresser/unsupported"
   saned_net_hosts:
     name: SANE network hosts
     description: Semicolon-separated hosts appended to /etc/sane.d/net.conf.
