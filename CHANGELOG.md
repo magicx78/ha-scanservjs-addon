@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.4.0] - 2026-03-25
+
+### Added
+- **DOC/DOCX-Support im Datenfresser:** Word-Dokumente (.doc, .docx) werden jetzt automatisch verarbeitet. LibreOffice (headless) konvertiert sie nach PDF, danach normaler Workflow (Klassifikation, Paperless).
+- `libreoffice-writer-nogui` im Docker-Image installiert
+
 ## [2.3.5] - 2026-03-25
 
 ### Added

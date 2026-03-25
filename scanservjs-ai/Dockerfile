@@ -14,6 +14,7 @@ RUN apt-get update \
         jq curl ca-certificates libusb-0.1-4 sane-airscan iproute2 \
         python3 python3-pip python3-venv cron \
         tesseract-ocr tesseract-ocr-deu ocrmypdf poppler-utils imagemagick \
+        libreoffice-writer-nogui \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && if [ -f /etc/ImageMagick-6/policy.xml ]; then \

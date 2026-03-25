@@ -31,7 +31,7 @@ from claude_namer import ClaudeNamer  # noqa: E402
 from paperless_api import PaperlessAPI  # noqa: E402
 from ha_notify import HANotifier  # noqa: E402
 
-SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif"}
+SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".doc", ".docx"}
 LOCK_FILE = Path("/data/datenfresser.lock")
 STATUS_FILE = Path("/data/datenfresser-status.json")
 MAX_SEEN_SIZE = 10000  # Cleanup bei zu vielem
@@ -118,6 +118,40 @@ def has_text_layer(pdf_path: Path) -> bool:
         return False
 
 
+def _convert_doc_to_pdf(src: Path, logger: logging.Logger) -> Optional[Path]:
+    """Konvertiert DOC/DOCX nach PDF via LibreOffice headless."""
+    if not shutil.which("libreoffice"):
+        logger.error(f"{src.name}: libreoffice nicht gefunden – DOC/DOCX-Konvertierung nicht moeglich")
+        return None
+
+    tmp_dir = Path("/tmp/datenfresser_doc")
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        logger.info(f"{src.name}: Konvertiere DOC/DOCX nach PDF via LibreOffice")
+        result = subprocess.run(
+            ["libreoffice", "--headless", "--convert-to", "pdf",
+             "--outdir", str(tmp_dir), str(src)],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode != 0:
+            logger.warning(f"{src.name}: LibreOffice-Konvertierung fehlgeschlagen: {result.stderr[:200]}")
+            return None
+
+        pdf_out = tmp_dir / (src.stem + ".pdf")
+        if pdf_out.exists() and pdf_out.stat().st_size > 0:
+            return pdf_out
+
+        logger.warning(f"{src.name}: LibreOffice hat keine PDF erzeugt")
+        return None
+    except subprocess.TimeoutExpired:
+        logger.warning(f"{src.name}: LibreOffice Timeout")
+        return None
+    except Exception as exc:
+        logger.error(f"{src.name}: DOC-Konvertierung Fehler: {exc}")
+        return None
+
+
 def run_ocr(
     src: Path, dest_dir: Path, ocr_lang: str, logger: logging.Logger, max_retries: int = 2
 ) -> Optional[Path]:
@@ -130,6 +164,21 @@ def run_ocr(
     ext = src.suffix.lower()
     out_name = src.stem + ".pdf"
     out_path = dest_dir / out_name
+
+    # --- DOC/DOCX: zuerst nach PDF konvertieren, dann wie PDF weiter ---
+    if ext in (".doc", ".docx"):
+        pdf_tmp = _convert_doc_to_pdf(src, logger)
+        if pdf_tmp is None:
+            return None
+        # Konvertierte PDF als neues src verwenden
+        try:
+            shutil.copy2(str(pdf_tmp), str(out_path))
+            pdf_tmp.unlink(missing_ok=True)
+            return out_path
+        except OSError as exc:
+            logger.error(f"{src.name}: Fehler beim Kopieren der konvertierten PDF: {exc}")
+            pdf_tmp.unlink(missing_ok=True)
+            return None
 
     if ext == ".pdf":
         try:
