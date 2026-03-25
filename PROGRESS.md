@@ -2,19 +2,19 @@
 
 **Repo:** https://github.com/magicx78/ha-scanservjs-addon
 **Branch:** `main`
-**Aktuelle Version:** `2.3.3`
+**Aktuelle Version:** `2.4.0`
 **Stand:** 2026-03-25
-**Letzter Commit:** `762919c`
+**Letzter Commit:** `c8730bf`
 
 ---
 
-## Status: Stabil & validiert
+## Status: Produktionsreif
 
-Addon v2.3.3 gebaut, alle 37 Unit-Tests bestehen, alle Config-Felder durchgereicht,
-alle Translations vollstaendig (de + en). Keine Secrets im Repo.
-HACS-kompatibel, GitHub Release vorhanden.
+Addon v2.4.0 — alle 37 Unit-Tests bestehen, 58 Config-Felder vollstaendig
+(options, schema, de+en translations). Keine Secrets im Repo.
+HACS-kompatibel, GitHub Releases vorhanden.
 
-Scanner: Brother MFC-L2700DW (Netzwerk), ADF Multi-Page aktiv.
+Scanner: Brother MFC-L2700DW (Netzwerk), ADF Multi-Page + Flachbett mit skey-scanimage Abfrage.
 
 ---
 
@@ -22,18 +22,24 @@ Scanner: Brother MFC-L2700DW (Netzwerk), ADF Multi-Page aktiv.
 
 | Komponente | Status |
 |-----------|--------|
-| Docker Build v2.3.3 | OK |
+| Docker Build v2.4.0 | OK |
 | scanservjs Web-UI (Port 8080) | OK |
 | Brother MFC-L2700DW (`brother4:net1;dev0`) | OK |
-| ADF Multi-Page Batch-Scan | OK (neu in v2.3.0) |
-| KI-Konfiguration (26+ Felder) | OK |
+| ADF Multi-Page Batch-Scan | OK |
+| Flachbett mit skey-scanimage Abfrage | OK |
+| TIFF→PDF Konvertierung (ImageMagick) | OK |
+| DOC/DOCX→PDF (LibreOffice headless) | OK (neu in v2.4.0) |
+| KI-Konfiguration (58 Felder) | OK |
 | Paperless-AI Cron (alle 5 Min) | OK |
 | Datenfresser (Folder Watcher) | OK |
 | HA-Sensor-Daemon (6 Sensoren) | OK |
 | Fehlerbehandlung (errors/unsupported) | OK |
 | Editierbare KI-Prompts | OK |
-| Translations (de + en) | Vollstaendig |
+| Scan-Rescue beim Neustart | OK (neu in v2.3.5) |
+| HACS Custom Repository | OK (neu in v2.3.3) |
+| Translations (de + en, 58/58) | Vollstaendig |
 | Unit-Tests (37/37) | Bestanden |
+| GitHub Releases | Aktuell |
 
 ---
 
@@ -41,11 +47,14 @@ Scanner: Brother MFC-L2700DW (Netzwerk), ADF Multi-Page aktiv.
 
 | Version | Was |
 |---------|-----|
-| 2.3.3 | ADF-Fallback fix: source=FB erzwingen, HACS-Release, Badges, Bugfixes |
-| 2.3.2 | Flachbett Multi-Page entfernt (Scanner blockiert Tasten), Signal-Dateien entfernt |
-| 2.3.1 | ADF-Autodiscovery: detect_adf_source() erkennt korrekten Source-Namen automatisch |
+| 2.4.0 | DOC/DOCX-Support: LibreOffice headless konvertiert Word-Dokumente nach PDF |
+| 2.3.5 | Scan-Rescue: verwaiste Scans beim Neustart in Datenfresser-Inbox retten |
+| 2.3.4 | ImageMagick fehlte im Docker-Image, PDF-Policy entsperrt |
+| 2.3.3 | HACS-Kompatibilitaet, Badges, GitHub Issues, Bugfixes, Release-Workflow |
+| 2.3.2 | Flachbett Multi-Page entfernt (Scanner blockiert Tasten), skey-scanimage Fallback |
+| 2.3.1 | ADF-Autodiscovery: detect_adf_source() erkennt korrekten Source-Namen |
 | 2.3.0 | Multi-Page ADF-Scan: Brother-Buttons scannen alle Seiten vom ADF, merge zu PDF |
-| 2.2.1 | HA-Sensoren Bugfix: falscher config.yaml Pfad, SUPERVISOR_TOKEN, unabhaengig von KI-Config |
+| 2.2.1 | HA-Sensoren Bugfix: falscher config.yaml Pfad, SUPERVISOR_TOKEN |
 | 2.2.0 | Editierbare KI-Prompts, HA-Sensoren, Fehlerbehandlung, verbesserte KI-Beschriftung |
 | 2.1.0 | Test Suite: 12 HybridCache Unit-Tests |
 | 2.0.0 | HA-Integration, KI-Status Widget, Classification-Cache |
@@ -65,9 +74,9 @@ Scanner: Brother MFC-L2700DW (Netzwerk), ADF Multi-Page aktiv.
 [scanservjs Web-UI :8080]
   |-- afterScan-Hook -> /share/paperless/consume/
   +-- Brother-Button-Skripte (brscan-skey)
-       |-- ADF: scanimage --batch -> Multi-Page PDF (v2.3.0)
-       |-- FB:  Single-Page Scan (Flachbett)
-       +-- -> /share/paperless/consume/
+       |-- ADF: scanimage --batch -> Multi-Page PDF
+       |-- FB:  skey-scanimage (mit "Weitere Seite?"-Abfrage)
+       +-- -> TIFF->PDF (ImageMagick) -> /share/paperless/consume/
                           |
                           v
                 [Paperless-ngx Consumer]
@@ -84,46 +93,32 @@ Scanner: Brother MFC-L2700DW (Netzwerk), ADF Multi-Page aktiv.
 
 [Datenfresser (Folder Watcher)]
   |-- /share/datenfresser/inbox (30s)
+  |-- Formate: PDF, JPG, PNG, TIFF, DOC, DOCX
+  |-- DOC/DOCX -> LibreOffice headless -> PDF
   |-- OCR (ocrmypdf/tesseract)
   |-- -> consume (OK) | errors (3x) | unsupported | duplicates
 
 [ha_sensors.py Daemon (60s)]
   +-- 6 Sensoren an HA REST API
+
+[Scan-Rescue beim Start]
+  +-- button_*.{tif,jpg,pdf,...} aus /data/output -> datenfresser/inbox
 ```
 
 ---
 
-## Dateien
+## Quality Gate v2.4.0
 
-```
-scanservjs-ai/
-|-- Dockerfile
-|-- config.yaml             # v2.3.3, ~50 Optionen
-|-- run.sh
-|-- brother-skey/
-|   |-- common.sh           # scan_batch_from_adf() + scan_via_profile()
-|   |-- scantoocr.sh
-|   |-- scantofile.sh
-|   |-- scantoemail.sh
-|   +-- scantoimage.sh
-|-- custom.css / custom.js
-|-- config.local.js
-|-- build.yaml
-|-- translations/de.yaml
-|-- translations/en.yaml
-+-- scripts/
-    |-- auto_consume.py
-    |-- poll_new_docs.py
-    |-- claude_namer.py
-    |-- paperless_api.py
-    |-- ha_notify.py
-    |-- ha_sensors.py
-    |-- datenfresser.py
-    |-- cache_manager.py
-    |-- duplicate_check.py
-    |-- requirements.txt
-    +-- tests/ (37 Tests)
-```
+| Pruefung | Ergebnis |
+|----------|----------|
+| Shell Syntax (7 Scripts) | OK |
+| Python Syntax (10 Scripts) | OK |
+| YAML Syntax (3 Dateien) | OK |
+| Config Vollstaendigkeit (58/58) | OK |
+| Unit-Tests (37/37) | Bestanden |
+| Secrets-Check | Sauber |
+| Brother-skey Sync (AI/non-AI) | OK |
+| GitHub Release v2.4.0 | Ausstehend |
 
 ---
 
@@ -137,6 +132,13 @@ scanservjs-ai/
 
 ---
 
+## Zukunft (zurueckgestellt)
+
+- **Drucken:** PDF in Print-Ordner -> Brother druckt (CUPS-Integration)
+- **Office-Dokumente schreiben:** LibreOffice Online als separates Addon
+
+---
+
 ## Bekannte Eigenheiten
 
 - `scanimage -L fehlgeschlagen` beim Start -> Normal (brsaneconfig4 registriert)
@@ -144,11 +146,4 @@ scanservjs-ai/
 - brscan4 bei jedem Start frisch installiert (~10 Sek)
 - KI-Panels nur auf Screens >= 1264px
 - ADF Exit-Code 7 ("no more pages") ist kein Fehler
-
----
-
-## Naechste Schritte
-
-1. HACS: Repo-URL in HACS als Custom Repository hinzufuegen und testen
-2. End-to-End Scan-Workflow validieren (Web-UI -> KI -> Paperless)
-3. KI-Prompts optimieren und Ergebnis pruefen
+- LibreOffice erster Start braucht ~5 Sek (Profil-Initialisierung)
