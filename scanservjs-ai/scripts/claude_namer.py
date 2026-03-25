@@ -1,5 +1,9 @@
 """
-Claude API Wrapper und Prompt-Logik fuer Dokumentenklassifikation
+KI-Wrapper und Prompt-Logik fuer Dokumentenklassifikation
+
+Unterstuetzte Backends:
+  - Claude API (api_key, pro_plan)
+  - Ollama (lokale KI)
 
 Zwei separate API-Calls:
   1. Tags-Kontext  : extrahiert Tags, Person, Firma, Konfidenz
@@ -10,8 +14,6 @@ Caching:
   - SQLite Basis + optional Redis
   - 24h TTL Standard
 
-Modell  : claude-haiku-4-5-20251001
-Timeout : 30 s
 Retries : 1 Retry mit vereinfachtem Prompt bei ungueltiger JSON-Antwort
 """
 
@@ -23,7 +25,12 @@ import time
 from pathlib import Path
 from typing import Optional
 
-import anthropic
+import requests as http_requests
+
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
 
 SCRIPT_DIR = Path(__file__).parent
 
@@ -200,13 +207,27 @@ FALLBACK_RESULT: dict = {
 
 
 # ---------------------------------------------------------------------------
-# ClaudeNamer
+# ClaudeNamer — unterstuetzt Claude API und Ollama
 # ---------------------------------------------------------------------------
 
 class ClaudeNamer:
     def __init__(self, config: dict, logger: logging.Logger, redis_client=None) -> None:
         self.logger = logger
-        self.client = anthropic.Anthropic(api_key=config["anthropic_api_key"])
+        self.backend = config.get("claude_access_type", "api_key")
+
+        # --- Backend initialisieren ---
+        if self.backend == "ollama":
+            self.ollama_url = (config.get("ollama_url") or "http://localhost:11434").rstrip("/")
+            self.ollama_model = config.get("ollama_model") or "llama3.1"
+            self.client = None
+            self.logger.info(f"Ollama-Backend: {self.ollama_url} model={self.ollama_model}")
+        else:
+            # Claude API (api_key, pro_plan)
+            if not anthropic:
+                raise ImportError("anthropic SDK nicht installiert")
+            self.client = anthropic.Anthropic(api_key=config["anthropic_api_key"])
+            self.ollama_url = None
+            self.ollama_model = None
 
         # Prompts laden (Datei > Hardcoded, plus optionale Config-Regeln)
         self.prompt_tags = _load_prompt(
@@ -237,7 +258,7 @@ class ClaudeNamer:
                 self.logger.warning(f"Cache-Initialisierung fehlgeschlagen: {exc}")
 
     def classify(self, ocr_text: str) -> dict:
-        """Klassifiziert ein Dokument mit zwei separaten Claude-Calls.
+        """Klassifiziert ein Dokument mit zwei separaten KI-Calls.
 
         Call 1: Tags, Person, Firma, Konfidenz
         Call 2: Datum, Kategorie, Beschreibung
@@ -279,28 +300,36 @@ class ClaudeNamer:
 
     def _call_with_retry(self, ocr_text: str, system_prompt: str, required_fields: list, context: str) -> Optional[dict]:
         """Fuehrt einen API-Call mit einem Retry durch."""
+        backend_name = "Ollama" if self.backend == "ollama" else "Claude"
         for attempt in range(1, 3):
             try:
-                result = self._call_claude(ocr_text, system_prompt)
-                self.logger.debug(f"Claude {context} OK (Versuch {attempt}): {result}")
+                result = self._call_ai(ocr_text, system_prompt)
+                self.logger.debug(f"{backend_name} {context} OK (Versuch {attempt}): {result}")
                 return result
             except (json.JSONDecodeError, ValueError) as exc:
-                self.logger.warning(f"Ungueltiges JSON von Claude {context} (Versuch {attempt}): {exc}")
+                self.logger.warning(f"Ungueltiges JSON von {backend_name} {context} (Versuch {attempt}): {exc}")
                 if attempt == 1:
                     time.sleep(1)
-            except anthropic.APITimeoutError:
-                self.logger.error(f"Claude API Timeout ({context}) – verwende Fallback")
-                break
-            except anthropic.APIStatusError as exc:
-                self.logger.error(f"Claude API Status-Fehler {exc.status_code}: {exc.message}")
-                break
-            except anthropic.APIError as exc:
-                self.logger.error(f"Claude API Fehler ({context}): {exc}")
+            except Exception as exc:
+                if anthropic and isinstance(exc, anthropic.APITimeoutError):
+                    self.logger.error(f"Claude API Timeout ({context}) – verwende Fallback")
+                elif anthropic and isinstance(exc, anthropic.APIStatusError):
+                    self.logger.error(f"Claude API Status-Fehler {exc.status_code}: {exc.message}")
+                elif anthropic and isinstance(exc, anthropic.APIError):
+                    self.logger.error(f"Claude API Fehler ({context}): {exc}")
+                else:
+                    self.logger.error(f"{backend_name} Fehler ({context}): {exc}")
                 break
         return None
 
+    def _call_ai(self, ocr_text: str, system_prompt: str) -> dict:
+        """Routet an das konfigurierte Backend."""
+        if self.backend == "ollama":
+            return self._call_ollama(ocr_text, system_prompt)
+        return self._call_claude(ocr_text, system_prompt)
+
     def _call_claude(self, ocr_text: str, system_prompt: str) -> dict:
-        """Fuehrt einen einzelnen API-Call durch und gibt das geparste Ergebnis zurueck."""
+        """Fuehrt einen einzelnen Claude-API-Call durch."""
         message = self.client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=512,
@@ -310,7 +339,34 @@ class ClaudeNamer:
         )
 
         raw: str = message.content[0].text.strip()
+        return self._parse_json(raw)
 
+    def _call_ollama(self, ocr_text: str, system_prompt: str) -> dict:
+        """Fuehrt einen einzelnen Ollama-API-Call durch."""
+        resp = http_requests.post(
+            f"{self.ollama_url}/api/chat",
+            json={
+                "model": self.ollama_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": ocr_text},
+                ],
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": 512},
+                "format": "json",
+            },
+            timeout=120,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        raw: str = data.get("message", {}).get("content", "").strip()
+        if not raw:
+            raise ValueError("Leere Antwort von Ollama")
+        return self._parse_json(raw)
+
+    @staticmethod
+    def _parse_json(raw: str) -> dict:
+        """Extrahiert JSON-Block aus KI-Antwort."""
         code_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
         json_str = code_match.group(1) if code_match else raw
 

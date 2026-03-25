@@ -612,17 +612,25 @@ def main() -> None:
         # --- Claude-Klassifikation (Optional) ---
         namer = None
         paperless = None
-        if config.get("claude_access_type") in ("api_key", "pro_plan") and config.get("anthropic_api_key"):
+        access_type = config.get("claude_access_type", "none")
+        ki_enabled = False
+        if access_type in ("api_key", "pro_plan") and config.get("anthropic_api_key"):
+            ki_enabled = True
+        elif access_type == "ollama" and config.get("ollama_url"):
+            ki_enabled = True
+
+        if ki_enabled:
             try:
                 namer = ClaudeNamer(config, logger)
                 paperless = PaperlessAPI(config, logger)
-                logger.info("Claude-Klassifikation aktiviert")
+                backend_name = "Ollama" if access_type == "ollama" else "Claude"
+                logger.info(f"KI-Klassifikation aktiviert (Backend: {backend_name})")
             except Exception as exc:
-                logger.warning(f"Claude-Klassifikation nicht verfügbar: {exc}")
+                logger.warning(f"KI-Klassifikation nicht verfügbar: {exc}")
                 namer = None
                 paperless = None
         else:
-            logger.info("Claude-Klassifikation deaktiviert (claude_access_type=none oder kein API-Key)")
+            logger.info("KI-Klassifikation deaktiviert (claude_access_type=none oder fehlende Konfiguration)")
 
         logger.info(
             f"Datenfresser gestartet | inbox={watch_dir} | consume={consume_dir} "

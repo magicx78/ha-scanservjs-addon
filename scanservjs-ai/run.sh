@@ -841,8 +841,12 @@ write_ai_config() {
   datenfresser_poll_interval="$(opt '.datenfresser_poll_interval // 30')"
   log_level="INFO"
 
+  local ollama_url ollama_model
+  ollama_url="$(opt '.ollama_url // "http://localhost:11434"')"
+  ollama_model="$(opt '.ollama_model // "llama3.1"')"
+
   if [[ "$claude_access" == "none" ]]; then
-    warn "Claude-Zugang auf 'Kein Zugang' gesetzt – KI-Klassifikation deaktiviert."
+    warn "KI-Zugang auf 'Kein Zugang' gesetzt – KI-Klassifikation deaktiviert."
     return 1
   fi
 
@@ -851,7 +855,10 @@ write_ai_config() {
     log "Claude Pro Plan: API-Key wird ueber Pro-Subscription abgerechnet"
   fi
 
-  if [[ -z "$api_key" || "$api_key" == "null" || "$api_key" == '""' ]]; then
+  # Ollama braucht keinen API-Key, nur URL
+  if [[ "$claude_access" == "ollama" ]]; then
+    log "Ollama-Backend: ${ollama_url} model=${ollama_model}"
+  elif [[ -z "$api_key" || "$api_key" == "null" || "$api_key" == '""' ]]; then
     warn "anthropic_api_key nicht gesetzt – KI-Klassifikation deaktiviert."
     return 1
   fi
@@ -870,6 +877,8 @@ paperless_url:     "${paperless_url}"
 paperless_token:   "${paperless_token}"
 claude_access_type: "${claude_access}"
 anthropic_api_key:  "${api_key}"
+ollama_url:         "${ollama_url}"
+ollama_model:       "${ollama_model}"
 ha_url:            "${ha_url}"
 ha_token:          "${ha_token}"
 ha_notify_target:  "${ha_notify}"

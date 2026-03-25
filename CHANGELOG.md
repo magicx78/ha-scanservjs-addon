@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.6.0] - 2026-03-25
+
+### Added
+- **Ollama-Support (lokale KI):** Neuer Zugangstyp `ollama` — Dokumentenklassifikation ueber lokale Ollama-Instanz statt Cloud-API. Kein API-Key noetig, Daten bleiben lokal.
+  - Neues Config-Feld `ollama_url` (Standard: http://localhost:11434)
+  - Neues Config-Feld `ollama_model` (Standard: llama3.1, auch mistral, gemma2 etc.)
+  - Verwendet Ollama Chat API mit JSON-Format-Erzwingung
+  - Gleiche Prompts, Cache und Fehlerbehandlung wie Claude-Backend
+
 ## [2.5.1] - 2026-03-25
 
 ### Fixed

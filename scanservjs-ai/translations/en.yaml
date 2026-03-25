@@ -1,10 +1,16 @@
 configuration:
   claude_access_type:
     name: Claude access type
-    description: "Type of Claude access: api_key for standard API key, pro_plan for Claude Pro/Team (API key from console.anthropic.com, included in subscription), none to disable."
+    description: "Type of AI access: api_key for Claude API, pro_plan for Claude Pro/Team, ollama for local AI (Ollama), none to disable."
   anthropic_api_key:
     name: Anthropic API key
     description: "API key for Claude AI. Required for api_key and pro_plan. Pro users: generate key at console.anthropic.com."
+  ollama_url:
+    name: Ollama URL
+    description: "URL to the Ollama instance, e.g. http://localhost:11434 or http://192.168.1.100:11434. Only when claude_access_type=ollama."
+  ollama_model:
+    name: Ollama model
+    description: "Name of the Ollama model for document classification, e.g. llama3.1, mistral, gemma2. Must be pulled first with 'ollama pull'."
   paperless_url:
     name: Paperless-ngx URL
     description: "URL to the Paperless-ngx instance, e.g. http://ca5234a0-paperless-ngx:8000"

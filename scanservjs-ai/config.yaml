@@ -1,5 +1,5 @@
 name: "scanservjs + KI (Paperless-AI)"
-version: "2.5.1"
+version: "2.6.0"
 slug: "scanservjs_ai"
 description: "Scanner Web-UI mit automatischer KI-Dokumentenklassifikation. Scans landen direkt in Paperless-ngx – Titel, Tags und Korrespondenten werden automatisch per Claude AI vergeben."
 url: "https://github.com/magicx78/ha-scanservjs-addon"
@@ -41,6 +41,8 @@ options:
   # --- KI / Claude API -------------------------------------------
   claude_access_type: "api_key"
   anthropic_api_key: ""
+  ollama_url: "http://localhost:11434"
+  ollama_model: "llama3.1"
   paperless_url: "http://ca5234a0-paperless-ngx:8000"
   paperless_token: ""
   min_konfidenz: 0.7
@@ -118,8 +120,10 @@ options:
 
 schema:
   # --- KI / Claude API -------------------------------------------
-  claude_access_type: list(api_key|pro_plan|none)?
+  claude_access_type: list(api_key|pro_plan|ollama|none)?
   anthropic_api_key: str?
+  ollama_url: str?
+  ollama_model: str?
   paperless_url: str?
   paperless_token: str?
   min_konfidenz: float?
