@@ -1,10 +1,10 @@
 configuration:
   claude_access_type:
     name: Claude access type
-    description: "Type of Claude access: api_key for API key, subscription for existing Claude subscription, none to disable."
+    description: "Type of Claude access: api_key for standard API key, pro_plan for Claude Pro/Team (API key from console.anthropic.com, included in subscription), none to disable."
   anthropic_api_key:
     name: Anthropic API key
-    description: "API key for Claude AI. Required when claude_access_type is set to api_key."
+    description: "API key for Claude AI. Required for api_key and pro_plan. Pro users: generate key at console.anthropic.com."
   paperless_url:
     name: Paperless-ngx URL
     description: "URL to the Paperless-ngx instance, e.g. http://ca5234a0-paperless-ngx:8000"
@@ -41,6 +41,15 @@ configuration:
   redis_url:
     name: Redis URL (optional)
     description: "Optional Redis URL for L1 cache in distributed setups, e.g. redis://redis:6379."
+  upload_enabled:
+    name: Enable upload server
+    description: "Starts an upload server (dufs). Open phone browser, upload file, it lands directly in the Datenfresser inbox."
+  upload_port:
+    name: Upload server port
+    description: "Port for the upload server. Default: 1000. Reachable in browser at http://<HA-IP>:1000"
+  upload_auth:
+    name: Upload server password
+    description: "Optional access control in format user:password. Empty = no login required (recommended only on local network)."
   datenfresser_enabled:
     name: Enable Datenfresser
     description: "Enables the folder watcher for automatic document processing."

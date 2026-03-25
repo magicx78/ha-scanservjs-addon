@@ -612,7 +612,7 @@ def main() -> None:
         # --- Claude-Klassifikation (Optional) ---
         namer = None
         paperless = None
-        if config.get("claude_access_type") != "none" and config.get("anthropic_api_key"):
+        if config.get("claude_access_type") in ("api_key", "pro_plan") and config.get("anthropic_api_key"):
             try:
                 namer = ClaudeNamer(config, logger)
                 paperless = PaperlessAPI(config, logger)

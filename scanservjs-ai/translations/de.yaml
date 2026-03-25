@@ -1,10 +1,10 @@
 configuration:
   claude_access_type:
     name: Claude-Zugangstyp
-    description: "Art des Claude-Zugangs: api_key fuer API-Schluessel, subscription fuer bestehende Claude-Subscription, none fuer deaktiviert."
+    description: "Art des Claude-Zugangs: api_key fuer normalen API-Schluessel, pro_plan fuer Claude Pro/Team (API-Key aus console.anthropic.com, im Abo enthalten), none fuer deaktiviert."
   anthropic_api_key:
     name: Anthropic API-Schluessel
-    description: "API-Key fuer Claude AI. Erforderlich wenn claude_access_type auf api_key gesetzt ist."
+    description: "API-Key fuer Claude AI. Erforderlich bei api_key und pro_plan. Pro-Nutzer: Key unter console.anthropic.com generieren."
   paperless_url:
     name: Paperless-ngx URL
     description: "URL zur Paperless-ngx Instanz, z.B. http://ca5234a0-paperless-ngx:8000"
@@ -41,6 +41,15 @@ configuration:
   redis_url:
     name: Redis URL (optional)
     description: "Optionale Redis-URL fuer L1-Cache in verteilten Setups, z.B. redis://redis:6379."
+  upload_enabled:
+    name: Upload-Server aktivieren
+    description: "Startet einen Upload-Server (dufs). Handy-Browser oeffnen, Datei hochladen, landet direkt in der Datenfresser-Inbox."
+  upload_port:
+    name: Upload-Server Port
+    description: "Port fuer den Upload-Server. Standard: 1000. Im Browser erreichbar unter http://<HA-IP>:1000"
+  upload_auth:
+    name: Upload-Server Passwort
+    description: "Optionaler Zugriffsschutz im Format user:passwort. Leer = kein Login erforderlich (nur im lokalen Netz empfohlen)."
   datenfresser_enabled:
     name: Datenfresser aktivieren
     description: "Aktiviert den Folder-Watcher fuer automatische Dokumentenverarbeitung."

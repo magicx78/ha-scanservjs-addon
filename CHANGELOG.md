@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.5.0] - 2026-03-25
+
+### Added
+- **Upload-Server (dufs):** Handy-Browser oeffnen, Datei hochladen, landet direkt in der Datenfresser-Inbox. Kein Pairing, keine App noetig.
+  - Neues Config-Feld `upload_enabled` (Standard: aktiviert)
+  - Neues Config-Feld `upload_port` (Standard: 1000)
+  - Neues Config-Feld `upload_auth` (optional, Format `user:passwort`)
+  - dufs Binary (Rust, ~5 MB) im Docker-Image enthalten
+  - Port 1000 im Addon freigegeben
+- **KI-Status Sensor:** Neuer `binary_sensor.scanservjs_ki_active` in Home Assistant — zeigt ob Claude-Klassifikation laeuft, inkl. letztes Dokument und Konfidenz als Attribute.
+- **Claude Pro Plan:** Neuer Zugangstyp `pro_plan` — Claude Pro/Team Nutzer koennen ihren API-Key aus console.anthropic.com verwenden (im Abo enthalten).
+
 ## [2.4.0] - 2026-03-25
 
 ### Added

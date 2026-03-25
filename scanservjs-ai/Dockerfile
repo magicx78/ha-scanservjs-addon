@@ -59,7 +59,13 @@ RUN for html in \
       fi; \
     done
 
-EXPOSE 8080
+# dufs — leichter Upload-Server fuer Handy/Browser-Upload in die Datenfresser-Inbox
+ARG DUFS_VERSION=v0.45.0
+RUN curl -fsSL "https://github.com/sigoden/dufs/releases/download/${DUFS_VERSION}/dufs-${DUFS_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+    | tar -xz -C /usr/local/bin dufs \
+    && chmod +x /usr/local/bin/dufs
+
+EXPOSE 8080 1000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -sf http://localhost:8080/ || exit 1

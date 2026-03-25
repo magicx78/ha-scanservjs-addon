@@ -12,6 +12,7 @@ Sensoren:
   sensor.datenfresser_unsupported_count - Dateien in unsupported/
   sensor.datenfresser_last_document     - Letztes verarbeitetes Dokument
   binary_sensor.datenfresser_running    - Prozess laeuft
+  binary_sensor.scanservjs_ki_active    - KI-Klassifikation aktiv
 """
 
 import json
@@ -112,6 +113,21 @@ def post_sensor(
         return False
 
 
+KI_STATUS_FILE = Path("/usr/lib/scanservjs/client/dist/ki-status.json")
+KI_STATUS_FALLBACK = Path("/app/client/dist/ki-status.json")
+
+
+def read_ki_status() -> dict:
+    """Liest die KI-Status-Datei (letztes klassifiziertes Dokument)."""
+    for path in (KI_STATUS_FILE, KI_STATUS_FALLBACK):
+        try:
+            if path.exists():
+                return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
 def update_sensors(session: requests.Session, ha_url: str, status: dict, logger: logging.Logger) -> None:
     """Aktualisiert alle Datenfresser-Sensoren in HA."""
     updated = status.get("updated", "")
@@ -178,6 +194,35 @@ def update_sensors(session: requests.Session, ha_url: str, status: dict, logger:
         "icon": "mdi:cog-sync" if running else "mdi:cog-off",
         "device_class": "running",
         "updated": updated,
+    }, logger)
+
+    # binary_sensor.scanservjs_ki_active — zeigt ob Claude-Klassifikation laeuft
+    ki_status = read_ki_status()
+    ki_active = False
+    ki_last_doc = ""
+    ki_konfidenz = ""
+    ki_updated = ""
+    if ki_status:
+        ki_updated = ki_status.get("updated", "")
+        last = ki_status.get("last_doc", {})
+        ki_last_doc = last.get("title", "")
+        ki_konfidenz = last.get("konfidenz", "")
+        # KI gilt als aktiv wenn letztes Update < 10 Minuten alt
+        if ki_updated:
+            try:
+                ki_time = datetime.fromisoformat(ki_updated.replace("Z", "+00:00"))
+                ki_age = (datetime.now(timezone.utc) - ki_time).total_seconds()
+                ki_active = ki_age < 600
+            except (ValueError, TypeError):
+                pass
+
+    post_sensor(session, ha_url, "binary_sensor.scanservjs_ki_active", "on" if ki_active else "off", {
+        "friendly_name": "KI-Klassifikation Aktiv",
+        "icon": "mdi:brain" if ki_active else "mdi:brain-off",
+        "device_class": "running",
+        "last_document": ki_last_doc,
+        "konfidenz": ki_konfidenz,
+        "updated": ki_updated,
     }, logger)
 
 

@@ -845,6 +845,11 @@ write_ai_config() {
     return 1
   fi
 
+  # pro_plan nutzt denselben API-Key-Mechanismus wie api_key
+  if [[ "$claude_access" == "pro_plan" ]]; then
+    log "Claude Pro Plan: API-Key wird ueber Pro-Subscription abgerechnet"
+  fi
+
   if [[ -z "$api_key" || "$api_key" == "null" || "$api_key" == '""' ]]; then
     warn "anthropic_api_key nicht gesetzt – KI-Klassifikation deaktiviert."
     return 1
@@ -914,6 +919,38 @@ start_datenfresser() {
   log "Starte Datenfresser (Folder Watcher)..."
   nohup /opt/venv/bin/python3 "${AI_SCRIPTS_DIR}/datenfresser.py" >> /data/datenfresser.log 2>&1 &
   log "Datenfresser im Hintergrund gestartet"
+}
+
+start_upload_server() {
+  local enabled port auth inbox
+  enabled="$(opt '.upload_enabled // true')"
+
+  if [[ "${enabled}" != "true" ]]; then
+    log "Upload-Server deaktiviert"
+    return 0
+  fi
+
+  port="$(opt '.upload_port // 5000')"
+  auth="$(opt '.upload_auth // ""')"
+  inbox="$(opt '.datenfresser_path // "/share/datenfresser/inbox"')"
+
+  if ! command -v dufs >/dev/null 2>&1; then
+    warn "Upload-Server: dufs Binary nicht gefunden"
+    return 0
+  fi
+
+  mkdir -p "$inbox" 2>/dev/null || true
+
+  local dufs_args=("$inbox" "--allow-upload" "-p" "$port")
+  if [[ -n "$auth" && "$auth" != "null" ]]; then
+    dufs_args+=("-a" "${auth}@/:rw")
+    log "Upload-Server mit Authentifizierung auf Port ${port} (Ziel: ${inbox})"
+  else
+    log "Upload-Server OHNE Authentifizierung auf Port ${port} (Ziel: ${inbox})"
+  fi
+
+  nohup dufs "${dufs_args[@]}" >> /data/upload_server.log 2>&1 &
+  log "Upload-Server gestartet (PID: $!) — Handy-Upload: http://<HA-IP>:${port}"
 }
 
 start_ha_sensors() {
@@ -1109,6 +1146,9 @@ main() {
   else
     log "KI-Klassifikation uebersprungen (fehlende Konfiguration)"
   fi
+
+  # --- Upload-Server starten (Handy/Browser-Upload) ---------------------
+  start_upload_server
 
   # --- HA-Sensoren starten (unabhaengig von KI-Config) -----------------
   start_ha_sensors
