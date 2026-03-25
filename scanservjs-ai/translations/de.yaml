@@ -127,7 +127,10 @@ configuration:
     description: Optionales Verzeichnis fuer Brother-Button-Scans. Leer = scanservjs Datenordner (sichtbar unter Dateien-Tab).
   brother_scan_source:
     name: Scan-Quelle (Flachbett/ADF)
-    description: "FB = Flachbett (einzelne Seite), ADF = Automatischer Dokumenteneinzug (scannt alle Seiten und fasst sie zu einem PDF zusammen). Der MFC-L2700DW ADF fasst bis zu 35 Seiten."
+    description: "FB = Flachbett (einzelne Seite), ADF = Multi-Page-Modus. Bei ADF wird erst der automatische Dokumenteneinzug versucht (bis 35 Seiten). Falls kein ADF erkannt wird, scannt vom Flachbett mit Wartezeit fuer naechste Seite (Button nochmal druecken). Alle Seiten werden zu einem PDF zusammengefasst."
+  brother_multipage_wait:
+    name: Wartezeit naechste Seite (Sekunden)
+    description: "Wie viele Sekunden nach einem Scan auf den naechsten Button-Druck gewartet wird (Flachbett-Multi-Page-Modus). 0 = kein Warten, nur Einzelseiten. Standard: 30."
   brother_button_default_resolution:
     name: Brother-Standardauflosung (DPI)
     description: "Standard-DPI fuer Brother-Button-Scans, wenn im Brother-Profil keine Aufloesung gesetzt ist. Empfehlung fuer OCR: 300 (600 nur fuer sehr kleine Schrift)."

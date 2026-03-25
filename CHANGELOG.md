@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.3.1] - 2026-03-25
+
+### Fixed
+- **ADF-Scan Exit-Code 1 behoben:** `detect_adf_source()` erkennt jetzt den korrekten ADF-Source-Namen automatisch (z.B. "Automatic Document Feeder(left aligned)" statt nur "ADF")
+- **Flachbett Multi-Page wiederhergestellt:** Wenn kein ADF erkannt wird oder ADF fehlschlaegt, scannt vom Flachbett mit Wartezeit (30s Standard). Naechsten Button druecken = naechste Seite scannen. Kein Button = fertig, alle Seiten zu PDF mergen.
+- **Alle 4 Button-Scripts** (OCR/File/Email/Image) erkennen laufenden Multi-Page-Scan und senden "weiter"-Signal statt neuen Scan zu starten
+
+### Added
+- Neue Config-Option `brother_multipage_wait` (Sekunden, Standard: 30) fuer Flachbett-Wartezeit
+
 ## [2.3.0] - 2026-03-25
 
 ### Added

@@ -127,7 +127,10 @@ configuration:
     description: Optional output directory for Brother button scans. Empty uses the scanservjs data folder (visible in the Files tab).
   brother_scan_source:
     name: Scan source (Flatbed/ADF)
-    description: "FB = Flatbed (single page), ADF = Automatic Document Feeder (scans all pages and merges them into one PDF). The MFC-L2700DW ADF holds up to 35 pages."
+    description: "FB = Flatbed (single page), ADF = Multi-page mode. Tries the automatic document feeder first (up to 35 pages). If no ADF is detected, scans from flatbed with a wait period for the next page (press button again). All pages are merged into one PDF."
+  brother_multipage_wait:
+    name: Next page wait time (seconds)
+    description: "How many seconds to wait for the next button press after a scan (flatbed multi-page mode). 0 = no waiting, single page only. Default: 30."
   brother_button_default_resolution:
     name: Brother default resolution (DPI)
     description: "Default DPI for Brother button scans when no profile resolution is set. OCR recommendation: 300 (use 600 only for very small text)."

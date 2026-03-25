@@ -371,57 +371,164 @@ copy_scan_output() {
   fi
 }
 
-scan_batch_from_adf() {
-  # Scannt alle Seiten vom ADF via scanimage --batch und fasst sie zu einem PDF zusammen.
+detect_adf_source() {
+  # Ermittelt den korrekten ADF-Source-Namen fuer den Scanner.
+  # Brother brscan4 nutzt oft andere Namen als Standard-SANE.
+  local device="$1"
+  local options_output source_name
+
+  options_output="$(scanimage -A -d "${device}" 2>/dev/null || true)"
+
+  # Versuche verschiedene ADF-Bezeichnungen (haeufigste zuerst)
+  for source_name in \
+    "Automatic Document Feeder(left aligned)" \
+    "Automatic Document Feeder" \
+    "ADF" \
+    "ADF Duplex" \
+  ; do
+    if grep -qF "${source_name}" <<<"${options_output}"; then
+      printf '%s\n' "${source_name}"
+      return 0
+    fi
+  done
+
+  button_log "warn" "no ADF source found in scanimage options"
+  return 1
+}
+
+scan_multipage() {
+  # Multi-Page-Scan: ADF (automatisch) oder Flachbett (zeitbasiert).
   # Gibt den Pfad zur fertigen Output-Datei auf stdout aus.
+  #
+  # Modus 1 — ADF: scanimage --batch, scannt bis ADF leer
+  # Modus 2 — Flachbett: scannt eine Seite, wartet BROTHER_MULTIPAGE_WAIT Sekunden,
+  #           prueft ob Markierungsdatei existiert (naechster Button-Druck), scannt weiter
+  #
   # Exit-Code 7 von scanimage = "no more pages" = normal bei ADF.
   local device="$1"
   local output_file="$2"
   local resolution="${BROTHER_BUTTON_DEFAULT_RESOLUTION:-300}"
-  local tmpdir page_count exit_code
-
-  # Profil-Config laden fuer Resolution
-  if [[ -n "${resolution:-}" ]]; then
-    :
-  fi
+  local wait_seconds="${BROTHER_MULTIPAGE_WAIT:-30}"
+  local tmpdir page_count exit_code page_num adf_source
+  local continue_file="/tmp/brother_scan_continue"
 
   tmpdir="$(mktemp -d /tmp/brother_batch_XXXXXX)"
 
-  button_log "info" "ADF batch scan start device=${device} resolution=${resolution} tmpdir=${tmpdir}"
+  # --- Versuche ADF ---
+  adf_source=""
+  if adf_source="$(detect_adf_source "${device}")"; then
+    button_log "info" "ADF batch scan start device=${device} source='${adf_source}' resolution=${resolution}"
 
-  exit_code=0
-  scanimage \
-    --device-name="${device}" \
-    --source="ADF" \
-    --format=tiff \
-    --resolution="${resolution}" \
-    -l 0 -t 0 -x 210 -y 297 \
-    --batch="${tmpdir}/page_%04d.tif" 2>>"${BROTHER_BUTTON_LOG_FILE}" || exit_code=$?
+    exit_code=0
+    scanimage \
+      --device-name="${device}" \
+      --source="${adf_source}" \
+      --format=tiff \
+      --resolution="${resolution}" \
+      --batch="${tmpdir}/page_%04d.tif" 2>>"${BROTHER_BUTTON_LOG_FILE}" || exit_code=$?
 
-  # Exit-Code 7 = "no more pages" (ADF leer) = OK
-  if [[ "${exit_code}" -ne 0 && "${exit_code}" -ne 7 ]]; then
-    button_log "error" "ADF batch scanimage failed exit=${exit_code}"
-    rm -rf "${tmpdir}"
-    return 1
+    # Exit-Code 7 = "no more pages" (ADF leer) = OK
+    if [[ "${exit_code}" -ne 0 && "${exit_code}" -ne 7 ]]; then
+      button_log "warn" "ADF scan failed exit=${exit_code}, trying flatbed multipage"
+    else
+      # ADF hat funktioniert — Seiten zaehlen
+      local -a pages=()
+      shopt -s nullglob
+      pages=("${tmpdir}"/page_*.tif)
+      shopt -u nullglob
+
+      if [[ "${#pages[@]}" -gt 0 ]]; then
+        _merge_pages "${tmpdir}" "${output_file}" "${#pages[@]}"
+        return $?
+      fi
+      button_log "warn" "ADF produced 0 pages, trying flatbed multipage"
+    fi
+  else
+    button_log "info" "no ADF detected, using flatbed multipage mode"
   fi
 
-  # Gescannte Seiten zaehlen
+  # --- Flachbett Multi-Page mit Wartezeit ---
+  button_log "info" "flatbed multipage start device=${device} wait=${wait_seconds}s"
+  rm -f "${continue_file}"
+  page_num=1
+
+  while true; do
+    local page_file="${tmpdir}/page_$(printf '%04d' ${page_num}).tif"
+
+    exit_code=0
+    scanimage \
+      --device-name="${device}" \
+      --source="${BROTHER_SCAN_SOURCE:-FB}" \
+      --format=tiff \
+      --resolution="${resolution}" \
+      >"${page_file}" 2>>"${BROTHER_BUTTON_LOG_FILE}" || exit_code=$?
+
+    if [[ "${exit_code}" -ne 0 || ! -s "${page_file}" ]]; then
+      rm -f "${page_file}"
+      if [[ "${page_num}" -eq 1 ]]; then
+        button_log "error" "first page scan failed exit=${exit_code}"
+        rm -rf "${tmpdir}"
+        return 1
+      fi
+      button_log "info" "scan stopped at page ${page_num} (exit=${exit_code})"
+      break
+    fi
+
+    button_log "info" "flatbed page ${page_num} scanned"
+
+    # Signal fuer "naechste Seite": Touch-Datei
+    # Der naechste Button-Druck erzeugt /tmp/brother_scan_continue
+    rm -f "${continue_file}"
+    touch "/tmp/brother_scan_waiting"
+    button_log "info" "waiting ${wait_seconds}s for next page (touch ${continue_file} or press button again)"
+
+    local waited=0
+    local should_continue=false
+    while [[ "${waited}" -lt "${wait_seconds}" ]]; do
+      sleep 1
+      waited=$((waited + 1))
+      if [[ -f "${continue_file}" ]]; then
+        should_continue=true
+        rm -f "${continue_file}"
+        button_log "info" "continue signal received after ${waited}s"
+        break
+      fi
+    done
+    rm -f "/tmp/brother_scan_waiting"
+
+    if [[ "${should_continue}" != "true" ]]; then
+      button_log "info" "no continue signal after ${wait_seconds}s, finishing with ${page_num} pages"
+      break
+    fi
+
+    page_num=$((page_num + 1))
+  done
+
+  _merge_pages "${tmpdir}" "${output_file}" "${page_num}"
+  return $?
+}
+
+_merge_pages() {
+  # Fasst gescannte Seiten zu einer Datei zusammen.
+  local tmpdir="$1"
+  local output_file="$2"
+  local page_count="$3"
+
   local -a pages=()
   shopt -s nullglob
   pages=("${tmpdir}"/page_*.tif)
   shopt -u nullglob
 
   page_count="${#pages[@]}"
-  button_log "info" "ADF batch scan completed pages=${page_count}"
+  button_log "info" "merging ${page_count} pages"
 
   if [[ "${page_count}" -eq 0 ]]; then
-    button_log "error" "ADF batch scan produced 0 pages"
+    button_log "error" "no pages to merge"
     rm -rf "${tmpdir}"
     return 1
   fi
 
   if [[ "${page_count}" -eq 1 ]]; then
-    # Einzelne Seite — direkt als Output verwenden
     mv "${pages[0]}" "${output_file%.*}.tif"
     rm -rf "${tmpdir}"
     printf '%s\n' "${output_file%.*}.tif"
@@ -433,17 +540,16 @@ scan_batch_from_adf() {
   if command -v convert >/dev/null 2>&1; then
     if convert "${pages[@]}" -strip -compress jpeg -quality 90 "${pdf_output}" \
        >>"${BROTHER_BUTTON_LOG_FILE}" 2>&1 && [[ -s "${pdf_output}" ]]; then
-      button_log "info" "ADF batch merged ${page_count} pages into ${pdf_output}"
+      button_log "info" "merged ${page_count} pages into ${pdf_output}"
       rm -rf "${tmpdir}"
       printf '%s\n' "${pdf_output}"
       return 0
     fi
-    button_log "warn" "ADF batch convert failed, falling back to first page"
+    button_log "warn" "convert merge failed, using first page only"
   else
     button_log "warn" "convert not found, using first page only"
   fi
 
-  # Fallback: nur erste Seite
   mv "${pages[0]}" "${output_file%.*}.tif"
   rm -rf "${tmpdir}"
   printf '%s\n' "${output_file%.*}.tif"
@@ -469,14 +575,14 @@ scan_via_profile() {
     exit 1
   fi
 
-  # --- ADF Multi-Page Batch-Scan -------------------------------------------
+  # --- Multi-Page Scan (ADF oder Flachbett mit Wartezeit) --------------------
   if [[ "${BROTHER_SCAN_SOURCE:-FB}" == "ADF" ]]; then
     output_file="${output_dir}/button_${profile}_$(button_timestamp).tif"
     local batch_output
-    if batch_output="$(scan_batch_from_adf "${device}" "${output_file}")"; then
+    if batch_output="$(scan_multipage "${device}" "${output_file}")"; then
       output_file="${batch_output}"
     else
-      button_log "error" "ADF batch scan failed for profile=${profile}"
+      button_log "error" "multipage scan failed for profile=${profile}"
       exit 1
     fi
 
