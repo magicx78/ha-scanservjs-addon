@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.3.3] - 2026-03-25
+
+### Fixed
+- **Scan-Button tat nichts:** ADF-Fallback auf Single-Page setzte `--source ADF` statt `--source FB` — skey-scanimage versuchte vom nicht-vorhandenen ADF zu scannen und scheiterte still. Jetzt wird `BROTHER_SCAN_SOURCE=FB` erzwungen bevor der Flachbett-Pfad ausgefuehrt wird.
+
 ## [2.3.2] - 2026-03-25
 
 ### Fixed
