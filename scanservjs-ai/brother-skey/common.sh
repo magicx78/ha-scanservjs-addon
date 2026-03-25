@@ -551,7 +551,10 @@ scan_via_profile() {
       return 0
     elif [[ "${batch_rc}" -eq 2 ]]; then
       # ADF nicht verfuegbar → weiter zum Single-Page-Pfad (skey-scanimage)
-      button_log "info" "ADF fallback: using standard single-page scan for profile=${profile}"
+      # WICHTIG: Source auf Flachbett setzen, damit skey-scanimage/scanimage nicht
+      # versucht, vom ADF zu scannen (der ja nicht verfuegbar ist)
+      BROTHER_SCAN_SOURCE="FB"
+      button_log "info" "ADF fallback: using standard single-page scan for profile=${profile} (source forced to FB)"
     else
       button_log "error" "multipage scan failed for profile=${profile}"
       exit 1
