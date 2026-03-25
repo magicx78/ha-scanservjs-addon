@@ -4,7 +4,7 @@
 **Branch:** `main`
 **Aktuelle Version:** `2.2.0`
 **Stand:** 2026-03-25
-**Letzter Commit:** `59d6f58` (fix: 18 Translations, 8 Config-Felder, 5 Tests)
+**Letzter Commit:** `95d3c58` (fix: HA-Sensoren 3 Bugs gefixt)
 
 ---
 
@@ -74,6 +74,7 @@ Scanner (Brother MFC-L2700DW, 10.10.10.216) wird erkannt und ist aktiv.
 
 | Version | Commit | Was |
 |---------|--------|-----|
+| 2.2.0 | `95d3c58` | HA-Sensoren: falscher config.yaml Pfad, SUPERVISOR_TOKEN nicht durchgereicht, unabhaengig von KI-Config |
 | 2.2.0 | `59d6f58` | 18 fehlende Translations, 8 Config-Felder in write_ai_config(), 5 Unit-Tests gefixt, pytest.ini repariert |
 | 2.2.0 | `767540e` | Editierbare KI-Prompts, HA-Sensoren, Fehlerbehandlung, verbesserte KI-Beschriftung |
 | 2.1.0 | `9c95a21` | Test Suite Release — PERF-501 Unit-Tests, HybridCache Validation |
