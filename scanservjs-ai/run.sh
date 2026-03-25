@@ -401,6 +401,7 @@ write_brother_button_env() {
     write_shell_var "BROTHER_DEFAULT_DEVICE" "${default_device}"
     write_shell_var "BROTHER_SCANNER_NAME" "${scanner_name}"
     write_shell_var "SUPERVISOR_TOKEN" "${SUPERVISOR_TOKEN:-}"
+    write_shell_var "DATENFRESSER_INBOX" "$(jq -r '.datenfresser_path // "/share/datenfresser/inbox"' "${CONFIG_PATH}")"
   } > "$env_file"
 
   chmod 600 "$env_file"

@@ -339,35 +339,47 @@ copy_scan_output() {
   local copy_file="${output_file}"
   local cleanup_copy_file="false"
   local converted_file=""
+  local copied_to_target="false"
 
-  if [[ -z "${COPY_SCANS_TO:-}" || "${COPY_SCANS_TO}" == "null" ]]; then
-    return 0
-  fi
+  # --- Normaler Copy nach COPY_SCANS_TO (wenn konfiguriert) ---
+  if [[ -n "${COPY_SCANS_TO:-}" && "${COPY_SCANS_TO}" != "null" ]]; then
+    if copy_to_target_enabled_for_profile "$profile"; then
+      if paperless_target_enabled; then
+        if converted_file="$(prepare_paperless_copy_source "${output_file}")"; then
+          copy_file="${converted_file}"
+          cleanup_copy_file="true"
+        fi
+      fi
 
-  if ! copy_to_target_enabled_for_profile "$profile"; then
-    button_log "info" "copy skipped for profile=${profile}: copy_to_target disabled"
-    return 0
-  fi
+      mkdir -p "${COPY_SCANS_TO}" 2>/dev/null || true
+      if cp -f "${copy_file}" "${COPY_SCANS_TO}/"; then
+        button_log "info" "copied output to ${COPY_SCANS_TO}/$(basename "${copy_file}")"
+        copied_to_target="true"
+      else
+        button_log "error" "copy failed target=${COPY_SCANS_TO} file=${copy_file}"
+      fi
 
-  if paperless_target_enabled; then
-    if converted_file="$(prepare_paperless_copy_source "${output_file}")"; then
-      copy_file="${converted_file}"
-      cleanup_copy_file="true"
+      if [[ "${cleanup_copy_file}" == "true" ]]; then
+        rm -f "${copy_file}"
+      fi
+    else
+      button_log "info" "copy skipped for profile=${profile}: copy_to_target disabled"
     fi
   fi
 
-  mkdir -p "${COPY_SCANS_TO}" 2>/dev/null || true
-  if ! cp -f "${copy_file}" "${COPY_SCANS_TO}/"; then
-    button_log "error" "copy failed target=${COPY_SCANS_TO} file=${copy_file}"
-    if [[ "${cleanup_copy_file}" == "true" ]]; then
-      rm -f "${copy_file}"
+  # --- Sicherheitsnetz: immer auch in Datenfresser-Inbox kopieren ---
+  local datenfresser_inbox="${DATENFRESSER_INBOX:-/share/datenfresser/inbox}"
+  if [[ -n "${datenfresser_inbox}" && "${datenfresser_inbox}" != "null" \
+        && "${datenfresser_inbox}" != "${COPY_SCANS_TO:-}" ]]; then
+    mkdir -p "${datenfresser_inbox}" 2>/dev/null || true
+    if cp -f "${output_file}" "${datenfresser_inbox}/"; then
+      button_log "info" "copied to datenfresser inbox: ${datenfresser_inbox}/$(basename "${output_file}")"
+    else
+      button_log "error" "copy to datenfresser inbox failed: ${output_file}"
     fi
-    return 1
-  fi
-
-  button_log "info" "copied output to ${COPY_SCANS_TO}/$(basename "${copy_file}")"
-  if [[ "${cleanup_copy_file}" == "true" ]]; then
-    rm -f "${copy_file}"
+  elif [[ "${copied_to_target}" != "true" ]]; then
+    # Weder COPY_SCANS_TO noch Datenfresser-Inbox → Warnung
+    button_log "warn" "scan not copied anywhere! output_file=${output_file}"
   fi
 }
 
