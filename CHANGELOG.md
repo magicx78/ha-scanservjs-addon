@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.5.1] - 2026-03-25
+
+### Fixed
+- **Brother-Scans immer in Datenfresser-Inbox:** Button-Scans (OCR/File/Email/Image) werden jetzt zusaetzlich immer in die Datenfresser-Inbox kopiert. Kein Scan geht mehr verloren, auch wenn `copy_scans_to` leer oder `copy_to_target` deaktiviert ist.
+
 ## [2.5.0] - 2026-03-25
 
 ### Added
