@@ -2,7 +2,7 @@
 
 **Repo:** https://github.com/magicx78/ha-scanservjs-addon
 **Branch:** `main`
-**Aktuelle Version:** `2.2.0`
+**Aktuelle Version:** `2.2.1`
 **Stand:** 2026-03-25
 **Letzter Commit:** `95d3c58` (fix: HA-Sensoren 3 Bugs gefixt)
 

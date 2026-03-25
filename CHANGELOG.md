@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1] - 2026-03-25
+
+### Fixed
+- **HA-Sensoren erschienen nicht:** `ha_sensors.py` las config.yaml aus falschem Pfad (`/opt/` statt `/opt/paperless-ai/`)
+- **SUPERVISOR_TOKEN** wurde nicht an den Sensor-Daemon durchgereicht — jetzt wird es direkt als Env-Var gelesen
+- **Sensor-Daemon startete nicht** wenn Claude-API-Key fehlte — Sensoren laufen jetzt unabhaengig von der KI-Konfiguration
+
 ## [2.2.0] - 2026-03-25
 
 ### Added
