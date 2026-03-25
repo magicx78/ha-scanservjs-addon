@@ -1,5 +1,47 @@
 # Changelog
 
+## [2.2.0] - 2026-03-25
+
+### Added
+- **Editierbare KI-Prompts:**
+  - Prompt-Dateien unter `/share/scanservjs-ai/` (prompt_tags.txt, prompt_dateiname.txt)
+  - Addon-Config Felder "Zusaetzliche Tag-Regeln" und "Zusaetzliche Dateinamen-Regeln"
+  - Reset-Toggle zum Zuruecksetzen auf Default-Prompts
+  - Prompts koennen per HA File Editor oder SSH angepasst werden
+
+- **HA-Sensoren fuer Datenfresser-Status (NEU):**
+  - `sensor.datenfresser_inbox_count` — Dateien in der Inbox-Queue
+  - `sensor.datenfresser_error_count` — Fehlgeschlagene Dateien
+  - `sensor.datenfresser_duplicate_count` — Duplikate
+  - `sensor.datenfresser_unsupported_count` — Inkompatible Formate
+  - `sensor.datenfresser_last_document` — Letztes verarbeitetes Dokument
+  - `binary_sensor.datenfresser_running` — Prozess-Status mit 5-Min-Timeout
+  - Neues Script `ha_sensors.py` als Hintergrund-Daemon (60s Intervall)
+
+- **Fehlerbehandlung und Error-Ordner (NEU):**
+  - `/share/datenfresser/errors` — OCR-Fehler nach 3 Versuchen
+  - `/share/datenfresser/unsupported` — Inkompatible Dateiformate (.docx, .xlsx etc.)
+  - Max-Retry-Counter pro Datei (3 Versuche, dann nach errors/)
+  - HA-Notifications bei inkompatiblen Dateien und OCR-Fehlern
+  - Status-Datei `/data/datenfresser-status.json` fuer HA-Sensoren
+
+### Improved
+- **KI-Beschriftung deutlich verbessert:**
+  - Tags-Prompt: 4 Positiv- + 2 Negativbeispiele, 8 Pflicht-Tag-Regeln (vorher 4)
+  - Dateiname-Prompt: 8 Referenzbeispiele (vorher 2), Kategorie-Zuordnungstabelle
+  - Firmen-Stammdaten erweitert: Telekom, Vodafone, E.ON, Stadtwerke, ADAC
+  - Beschreibung muss jetzt Absender/Firma und Dokumenttyp enthalten
+  - Negativbeispiele verhindern generische Tags wie "Scan", "Dokument", "Brief"
+  - OCR-Text-Limit von 3000 auf 5000 Zeichen erhoeht
+
+### Fixed
+- YAML-Injection in `write_ai_config()` durch `yaml_escape()` Funktion behoben
+- Versteckte Dateien (`.scan_temp.pdf`) werden jetzt immer ignoriert (Check vor Extension-Pruefung)
+- KI-Fallback-Dokumente bekommen nicht mehr faelschlicherweise `[KI-Verarbeitet]` Tag
+- Doppelte MD5-Berechnung in `classify()` entfernt
+- `retry_counts` Memory-Leak bei langem Betrieb behoben (Cleanup bei >1000 Eintraegen)
+- Fallback-Tag von `[Pruefen]` auf `[KI-Fehler]` geaendert (klar unterscheidbar)
+
 ## [2.1.0] - 2026-03-22
 
 ### Testing

@@ -33,7 +33,9 @@ from ha_notify import HANotifier  # noqa: E402
 
 SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif"}
 LOCK_FILE = Path("/data/datenfresser.lock")
+STATUS_FILE = Path("/data/datenfresser-status.json")
 MAX_SEEN_SIZE = 10000  # Cleanup bei zu vielem
+MAX_OCR_RETRIES = 3  # Max Versuche pro Datei bevor sie nach errors/ verschoben wird
 
 _ENV_OVERRIDES = {
     "datenfresser_path":            "DATENFRESSER_PATH",
@@ -259,9 +261,49 @@ def write_ki_status(filename: str, title: str, tags: list, konfidenz: float, kat
         }
         status_file = Path("/data/ki-status.json")
         status_file.write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as exc:
-        # Fehler beim Status-Schreiben soll nicht den Hauptfluss blockieren
+    except Exception:
         pass
+
+
+def write_datenfresser_status(
+    watch_dir: Path, dup_dir: Path, error_dir: Path, unsupported_dir: Path,
+    last_doc: str = "", last_error: str = "",
+) -> None:
+    """Schreibt Datenfresser-Status als JSON fuer HA-Sensoren."""
+    def _count_files(d: Path) -> int:
+        try:
+            return sum(1 for f in d.iterdir() if f.is_file()) if d.exists() else 0
+        except OSError:
+            return 0
+
+    try:
+        status = {
+            "inbox_count": _count_files(watch_dir),
+            "duplicate_count": _count_files(dup_dir),
+            "error_count": _count_files(error_dir),
+            "unsupported_count": _count_files(unsupported_dir),
+            "last_document": last_doc,
+            "last_error": last_error,
+            "running": True,
+            "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        STATUS_FILE.write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def move_to_dir(src: Path, dest_dir: Path, logger: logging.Logger) -> Optional[Path]:
+    """Verschiebt eine Datei in einen Zielordner (mit Namenskollision-Schutz)."""
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        target = dest_dir / src.name
+        if target.exists():
+            target = dest_dir / f"{src.stem}_{int(time.time())}{src.suffix}"
+        shutil.move(str(src), str(target))
+        return target
+    except OSError as exc:
+        logger.error(f"{src.name}: Verschieben nach {dest_dir} fehlgeschlagen: {exc}")
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -272,9 +314,12 @@ def watch_once(
     watch_dir: Path,
     consume_dir: Path,
     dup_dir: Path,
+    error_dir: Path,
+    unsupported_dir: Path,
     checker: DuplicateChecker,
     ocr_lang: str,
     seen: set,
+    retry_counts: dict,
     logger: logging.Logger,
     namer: Optional["ClaudeNamer"] = None,
     paperless: Optional["PaperlessAPI"] = None,
@@ -287,17 +332,42 @@ def watch_once(
         logger.error(f"Kann Inbox nicht lesen: {exc}")
         return
 
-    # Cleanup seen-Set wenn zu viele Einträge
+    # Cleanup seen-Set und retry_counts wenn zu viele Einträge
     if len(seen) > MAX_SEEN_SIZE:
-        logger.debug(f"Cleanup seen-Set ({len(seen)} → {len(seen) // 2} Einträge)")
+        logger.debug(f"Cleanup seen-Set ({len(seen)} Eintraege)")
         seen.clear()
+    if len(retry_counts) > 1000:
+        logger.debug(f"Cleanup retry_counts ({len(retry_counts)} Eintraege)")
+        retry_counts.clear()
+
+    last_doc = ""
+    last_error = ""
 
     for entry in entries:
         try:
             if not entry.is_file():
                 continue
+            if entry.name.startswith("."):
+                continue  # Versteckte/temporaere Dateien immer ignorieren
+
+            # Unsupported-Dateien erkennen und verschieben
             if entry.suffix.lower() not in SUPPORTED_EXTENSIONS:
+                if not is_stable(entry):
+                    continue
+                moved = move_to_dir(entry, unsupported_dir, logger)
+                if moved:
+                    logger.warning(
+                        f"{entry.name}: Format nicht unterstuetzt ({entry.suffix}) "
+                        f"→ verschoben nach {unsupported_dir.name}/"
+                    )
+                    last_error = f"Nicht unterstuetzt: {entry.name}"
+                    if notifier:
+                        notifier.notify_warning(
+                            f"Datei {entry.name!r} hat ein nicht unterstuetztes Format "
+                            f"({entry.suffix}) und wurde nach {unsupported_dir.name}/ verschoben."
+                        )
                 continue
+
             if entry in seen:
                 continue
 
@@ -318,9 +388,7 @@ def watch_once(
 
             is_dup, original = checker.is_duplicate(md5)
             if is_dup:
-                # Duplikat erkannt: Auch zu duplicates/ UND zu consume/ (mit "is_duplicate"-Marker)
                 dup_target = dup_dir / entry.name
-                # Eindeutigen Namen vergeben falls Duplikat-Ordner schon denselben Namen hat
                 if dup_target.exists():
                     dup_target = dup_dir / f"{entry.stem}_{int(time.time())}{entry.suffix}"
                 try:
@@ -331,28 +399,44 @@ def watch_once(
                     )
                 except OSError as exc:
                     logger.error(f"{entry.name}: Fehler beim Kopieren zu Duplikaten: {exc}")
-
-                # Duplikat auch OCR + consume/ mit Marker
                 is_dup_flag = True
             else:
                 is_dup_flag = False
 
-            # OCR + in consume verschieben (für beide: normale Dateien + Duplikate)
+            # OCR + in consume verschieben
             out_file = run_ocr(entry, consume_dir, ocr_lang, logger)
             if out_file is None:
-                logger.error(f"{entry.name}: OCR fehlgeschlagen – Datei bleibt in Inbox")
-                seen.discard(entry)
+                # Retry-Counter prüfen
+                file_key = str(entry)
+                retry_counts[file_key] = retry_counts.get(file_key, 0) + 1
+                if retry_counts[file_key] >= MAX_OCR_RETRIES:
+                    # Nach N Versuchen: nach errors/ verschieben
+                    moved = move_to_dir(entry, error_dir, logger)
+                    if moved:
+                        logger.error(
+                            f"{entry.name}: OCR fehlgeschlagen nach {MAX_OCR_RETRIES} Versuchen "
+                            f"→ verschoben nach {error_dir.name}/"
+                        )
+                        last_error = f"OCR fehlgeschlagen: {entry.name}"
+                        if notifier:
+                            notifier.notify_warning(
+                                f"OCR fuer {entry.name!r} nach {MAX_OCR_RETRIES} Versuchen fehlgeschlagen. "
+                                f"Datei nach {error_dir.name}/ verschoben."
+                            )
+                    retry_counts.pop(file_key, None)
+                    seen.discard(entry)
+                else:
+                    logger.warning(
+                        f"{entry.name}: OCR fehlgeschlagen (Versuch {retry_counts[file_key]}/{MAX_OCR_RETRIES}) "
+                        f"– naechster Versuch beim naechsten Poll"
+                    )
+                    seen.discard(entry)
                 continue
 
-            # Falls Duplikat: Original aus Inbox löschen (nach erfolgreicher OCR)
-            # (bei normalen Dateien passiert das später)
-            if is_dup_flag:
-                try:
-                    entry.unlink()
-                except OSError as exc:
-                    logger.warning(f"{entry.name}: Original konnte nicht gelöscht werden: {exc}")
+            # Retry-Counter zurücksetzen bei Erfolg
+            retry_counts.pop(str(entry), None)
 
-            # Original aus Inbox entfernen (nur wenn OCR erfolgreich)
+            # Original aus Inbox entfernen
             try:
                 entry.unlink()
             except OSError as exc:
@@ -366,7 +450,6 @@ def watch_once(
             if namer and paperless:
                 try:
                     if is_dup_flag:
-                        # Für Duplikate: Nur Marker setzen, nicht klassifizieren
                         classif_json = {
                             "filename": out_file.name,
                             "is_duplicate": True,
@@ -374,10 +457,9 @@ def watch_once(
                         }
                         logger.debug(f"{out_file.name}: Duplikat-Marker gespeichert")
                     else:
-                        # Normal: OCR-Text klassifizieren
                         ocr_text = extract_text_from_pdf(out_file, logger)
                         if ocr_text and ocr_text.strip():
-                            result = namer.classify(ocr_text[:3000])
+                            result = namer.classify(ocr_text[:5000])
                             title = build_title(result)
                             classif_json = {
                                 "filename": out_file.name,
@@ -392,7 +474,6 @@ def watch_once(
                         else:
                             logger.debug(f"{out_file.name}: Kein OCR-Text für Klassifikation")
 
-                    # JSON-Datei in Cache-Verzeichnis schreiben (für poll_new_docs.py)
                     if classif_json:
                         try:
                             DATENFRESSER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -404,9 +485,10 @@ def watch_once(
                 except Exception as exc:
                     logger.warning(f"{out_file.name}: Klassifikation fehlgeschlagen: {exc}")
 
-            logger.info(f"{entry.name} → {out_file.name} in consume/ verschoben ✓")
+            last_doc = out_file.name
+            logger.info(f"{entry.name} → {out_file.name} in consume/ verschoben")
 
-            # UI-Status aktualisieren (für custom.js Echtzeit-Widget)
+            # UI-Status aktualisieren
             if classif_json:
                 write_ki_status(
                     filename=out_file.name,
@@ -424,6 +506,12 @@ def watch_once(
             logger.error(f"Unerwarteter Fehler bei {entry.name}: {exc}", exc_info=True)
             seen.discard(entry)
             continue
+
+    # Status-Datei aktualisieren (nach jedem Poll-Durchlauf)
+    write_datenfresser_status(
+        watch_dir, dup_dir, error_dir, unsupported_dir,
+        last_doc=last_doc, last_error=last_error,
+    )
 
 
 def main() -> None:
@@ -448,6 +536,8 @@ def main() -> None:
         watch_dir = Path(config.get("datenfresser_path", "/share/datenfresser/inbox"))
         consume_dir = Path(config.get("copy_scans_to", "/share/paperless/consume"))
         dup_dir = Path(config.get("datenfresser_duplicates_path", "/share/datenfresser/duplicates"))
+        error_dir = Path(config.get("datenfresser_errors_path", "/share/datenfresser/errors"))
+        unsupported_dir = Path(config.get("datenfresser_unsupported_path", "/share/datenfresser/unsupported"))
         ocr_lang = config.get("ocr_lang", "deu+eng")
         poll_secs = int(config.get("datenfresser_poll_interval", 30))
 
@@ -457,7 +547,7 @@ def main() -> None:
             poll_secs = 5
 
         # Verzeichnisse anlegen
-        for d in (watch_dir, dup_dir):
+        for d in (watch_dir, dup_dir, error_dir, unsupported_dir):
             try:
                 d.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
@@ -487,18 +577,24 @@ def main() -> None:
 
         logger.info(
             f"Datenfresser gestartet | inbox={watch_dir} | consume={consume_dir} "
-            f"| duplicates={dup_dir} | poll={poll_secs}s | lang={ocr_lang}"
+            f"| duplicates={dup_dir} | errors={error_dir} | unsupported={unsupported_dir} "
+            f"| poll={poll_secs}s | lang={ocr_lang}"
         )
 
         seen: set = set()
+        retry_counts: dict = {}  # {Dateipfad: Anzahl fehlgeschlagener OCR-Versuche}
         consecutive_errors = 0
         max_consecutive_errors = 10
 
         while True:
             try:
                 if consume_dir.exists():
-                    watch_once(watch_dir, consume_dir, dup_dir, checker, ocr_lang, seen, logger, namer, paperless, notifier)
-                    consecutive_errors = 0  # Reset bei erfolgreichem Durchlauf
+                    watch_once(
+                        watch_dir, consume_dir, dup_dir, error_dir, unsupported_dir,
+                        checker, ocr_lang, seen, retry_counts, logger,
+                        namer, paperless, notifier,
+                    )
+                    consecutive_errors = 0
                 else:
                     if consecutive_errors == 0:
                         logger.debug(f"consume-Ordner nicht vorhanden – warte")
@@ -517,7 +613,6 @@ def main() -> None:
                     logger.critical(f"Zu viele Fehler ({max_consecutive_errors}) – Datenfresser beendet")
                     sys.exit(1)
 
-                # Kurze Pause vor nächstem Versuch
                 time.sleep(min(poll_secs * 2, 60))
 
     except Exception as exc:

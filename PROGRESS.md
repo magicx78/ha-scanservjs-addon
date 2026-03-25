@@ -2,8 +2,8 @@
 
 **Repo:** https://github.com/magicx78/ha-scanservjs-addon
 **Branch:** `main`
-**Aktuelle Version:** `1.2.7`
-**Stand:** 2026-03-17
+**Aktuelle Version:** `2.2.0`
+**Stand:** 2026-03-25
 
 ---
 

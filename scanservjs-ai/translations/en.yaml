@@ -23,6 +23,15 @@ configuration:
   generic_scanner_ip:
     name: Generic scanner IP (AirScan fallback)
     description: Optional scanner IP for automatic eSCL/WSD entries when airscan_devices is empty. Useful for HP/Epson/Canon/Xerox MFPs without Brother mode.
+  custom_tags_rules:
+    name: Additional tag rules
+    description: "Single-line extra rules for AI tag extraction, e.g. 'Invoices from Telekom always tag [Telecom]'. For extensive changes edit /share/scanservjs-ai/prompt_tags.txt directly."
+  custom_filename_rules:
+    name: Additional filename rules
+    description: "Single-line extra rules for AI filename generation, e.g. 'Doctor letters always category Arzt'. For extensive changes edit /share/scanservjs-ai/prompt_dateiname.txt directly."
+  reset_prompts_to_default:
+    name: Reset AI prompts to default
+    description: "On next addon restart, overwrites prompt files under /share/scanservjs-ai/ with defaults. Warning: custom changes will be lost. Disable again after restart."
   brother_enable:
     name: Enable Brother support
     description: Activates optional Brother brscan4 setup logic.

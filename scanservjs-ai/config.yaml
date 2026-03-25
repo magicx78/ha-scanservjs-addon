@@ -1,5 +1,5 @@
 name: "scanservjs + KI (Paperless-AI)"
-version: "2.1.0"
+version: "2.2.0"
 slug: "scanservjs_ai"
 description: "Scanner Web-UI mit automatischer KI-Dokumentenklassifikation. Scans landen direkt in Paperless-ngx – Titel, Tags und Korrespondenten werden automatisch per Claude AI vergeben."
 url: "https://github.com/magicx78/ha-scanservjs-addon"
@@ -43,6 +43,11 @@ options:
   paperless_token: ""
   min_konfidenz: 0.7
   ai_poll_interval: 5
+
+  # --- KI-Prompt Anpassung ----------------------------------------
+  custom_tags_rules: ""
+  custom_filename_rules: ""
+  reset_prompts_to_default: false
 
   # --- Home Assistant Integration --------------------------------
   ha_url: "http://homeassistant.local:8123"
@@ -108,6 +113,11 @@ schema:
   paperless_token: str?
   min_konfidenz: float?
   ai_poll_interval: int?
+
+  # --- KI-Prompt Anpassung ----------------------------------------
+  custom_tags_rules: str?
+  custom_filename_rules: str?
+  reset_prompts_to_default: bool?
 
   # --- Home Assistant Integration --------------------------------
   ha_url: str?

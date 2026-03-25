@@ -7,6 +7,9 @@ APP_DIR="${APP_DIR:-}"
 RUNTIME_REVISION="2026-03-17-r35"
 AI_SCRIPTS_DIR="/opt/paperless-ai"
 AI_CONFIG_FILE="${AI_SCRIPTS_DIR}/config.yaml"
+PROMPT_DIR="/share/scanservjs-ai"
+PROMPT_TAGS_FILE="${PROMPT_DIR}/prompt_tags.txt"
+PROMPT_FILENAME_FILE="${PROMPT_DIR}/prompt_dateiname.txt"
 
 log() {
   bashio::log.info "$*"
@@ -66,6 +69,14 @@ log_cmd_output_timeout() {
 opt() {
   local query="$1"
   jq -r "${query}" "${CONFIG_PATH}"
+}
+
+yaml_escape() {
+  # Escaped einen Wert fuer sichere Einbettung in doppelte YAML-Anfuehrungszeichen
+  local val="$1"
+  val="${val//\\/\\\\}"     # Backslash escapen
+  val="${val//\"/\\\"}"     # Doppelte Anfuehrungszeichen escapen
+  printf '%s' "$val"
 }
 
 route_interface_for_ip() {
@@ -659,8 +670,153 @@ register_brother() {
 # KI-Konfiguration aus HA-Addon-Optionen generieren
 # ---------------------------------------------------------------------------
 
+write_default_prompts() {
+  local reset
+  reset="$(opt '.reset_prompts_to_default // false')"
+
+  mkdir -p "${PROMPT_DIR}"
+
+  # Tags-Prompt
+  if [[ ! -f "${PROMPT_TAGS_FILE}" || "${reset}" == "true" ]]; then
+    cat > "${PROMPT_TAGS_FILE}" <<'PROMPT'
+Du extrahierst Tags, Personen und Firmen aus einem deutschen Haushaltsdokument.
+
+## Bekannte Stammdaten
+Personen : Wiesbrock (Christian, Maike), Schiefer, Hollmann
+Orte     : Oerlinghausen, Helpup, Nedderhof, Detmold, Bielefeld
+Firmen   : Bauhaus, Shell, BKK, Sparkasse Lemgo, Riverty, Amazon,
+           Finanzamt Detmold, Klinikum Bielefeld, Hausarzt Beckmann,
+           Telekom, Vodafone, E.ON, Stadtwerke Bielefeld, ADAC
+
+## Pflicht-Tags je Dokumenttyp
+- Lohn / Lohnsteuer             -> Tags MUSS [Sparkasse] enthalten
+- Kranken- / Sozialversicherung -> Tags MUSS [Versicherung] enthalten
+- Rezepte                       -> Tags MUSS [Rezepte] enthalten
+- Haus-Bauakten (Hollmann)      -> Tags MUSS [Hollmann] UND [Helpup] enthalten
+- Rechnungen / Mahnungen        -> Tags MUSS Firmenname enthalten
+- Steuer / Finanzamt            -> Tags MUSS [Steuer] UND Jahr enthalten
+- Versicherungen (nicht KK)     -> Tags MUSS [Versicherung] UND Versicherer enthalten
+- Arbeitsvertrag / Kuendigung   -> Tags MUSS [Arbeit] UND Arbeitgeber enthalten
+
+## Regeln
+- Keine Umlaute: ae oe ue ss
+- Keine Leerzeichen; Woerter mit Bindestrich trennen
+- Tags: Personen, Firmen, Orte, Jahre, Themen – maximal 10
+- Kein generisches "Scan", "Dokument", "Seite" oder "Brief" als Tag
+- Bevorzuge bekannte Stammdaten fuer Tags/Person/Firma
+- Bei Rechnungen: Rechnungsnummer NICHT als Tag verwenden
+- Jahreszahl als Tag nur wenn im Dokument erkennbar (z.B. "2024")
+- person = die Person an die das Dokument gerichtet ist (Empfaenger)
+- firma = der Absender / ausstellende Organisation
+
+## Referenzbeispiele
+Lohnabrechnung Bauhaus fuer Maike Wiesbrock, Januar 2024:
+{"tags":["Bauhaus","Wiesbrock","Lohn","2024","Sparkasse"],"person":"Maike Wiesbrock","firma":"Bauhaus","konfidenz":0.95}
+
+BKK Krankengeld-Bescheinigung fuer Christian Wiesbrock:
+{"tags":["BKK","Wiesbrock","Versicherung","Krankengeld","2025"],"person":"Christian Wiesbrock","firma":"BKK","konfidenz":0.90}
+
+Amazon Rechnung ueber USB-Kabel, 15.02.2025:
+{"tags":["Amazon","Rechnung","2025","Online-Kauf"],"person":null,"firma":"Amazon","konfidenz":0.92}
+
+Finanzamt Detmold Einkommensteuerbescheid 2023:
+{"tags":["Finanzamt-Detmold","Steuer","Einkommensteuer","2023","Wiesbrock"],"person":"Christian Wiesbrock","firma":"Finanzamt Detmold","konfidenz":0.95}
+
+FALSCH (zu generisch): {"tags":["Scan","Dokument","Brief"],...}
+FALSCH (Rechnungsnr): {"tags":["INV-2024-00815"],...}
+
+Antworte ausschliesslich mit validem JSON:
+{
+  "tags": ["Tag1", "Tag2"],
+  "person": "Name oder null",
+  "firma": "Firma oder null",
+  "konfidenz": 0.95
+}
+Kein Markdown, keine Code-Blocks.
+PROMPT
+    log "Default Tags-Prompt geschrieben: ${PROMPT_TAGS_FILE}"
+  fi
+
+  # Dateiname-Prompt
+  if [[ ! -f "${PROMPT_FILENAME_FILE}" || "${reset}" == "true" ]]; then
+    cat > "${PROMPT_FILENAME_FILE}" <<'PROMPT'
+Du erzeugst strukturierte Metadaten fuer den Dateinamen eines deutschen Haushaltsdokuments.
+
+## Erlaubte Kategorien (exakt eine auswaehlen)
+Haus | Arzt | Finanzamt | Krankenkasse | Lohnsteuer | Lohn |
+Sozialversicherung | Rechnung | Arbeit | Sonstiges
+
+## Kategorie-Zuordnung (Entscheidungshilfe)
+- Arztbrief, Befund, Rezept, Ueberweisung     -> Arzt
+- Lohnabrechnung, Gehaltsnachweis              -> Lohn
+- Lohnsteuerbescheinigung, Lohnsteuer-Jahres   -> Lohnsteuer
+- Krankenkasse, Krankengeld, AU-Bescheinigung  -> Krankenkasse
+- Rentenversicherung, Sozialvers.-Nachweis     -> Sozialversicherung
+- Steuerbescheid, Finanzamt, EkSt, USt         -> Finanzamt
+- Kaufvertrag, Grundbuch, Baugenehmigung       -> Haus
+- Rechnung, Mahnung, Quittung, Bestellung      -> Rechnung
+- Arbeitsvertrag, Kuendigung, Zeugnis          -> Arbeit
+- Alles andere                                 -> Sonstiges
+
+## Regeln
+- Datum aus Dokumentinhalt extrahieren; bei Unklarheit: "0000-00-00"
+  Partielle Daten erlaubt: "2024-01-00" (Monat bekannt, Tag nicht)
+- Keine Umlaute: ae oe ue ss
+- Keine Leerzeichen; Woerter mit Bindestrich trennen
+- Beschreibung: praegnant, 2-5 Woerter, auf Deutsch
+- Beschreibung MUSS den Absender/Firma enthalten
+- Beschreibung MUSS den Dokumenttyp benennen (z.B. Rechnung, Bescheid, Abrechnung)
+- Kein generisches "Scan", "Dokument" oder "Brief" in der Beschreibung
+
+## Referenzbeispiele (8 Stueck)
+Lohnabrechnung Maike Wiesbrock, Bauhaus, Januar 2024:
+{"datum":"2024-01-00","kategorie":"Lohn","beschreibung":"Bauhaus-Verdienstabrechnung-Januar-2024"}
+
+BKK Krankengeld-Bescheinigung 01.03.2025:
+{"datum":"2025-03-01","kategorie":"Krankenkasse","beschreibung":"BKK-Krankengeld-Ende-AU"}
+
+Amazon Rechnung USB-Kabel 15.02.2025:
+{"datum":"2025-02-15","kategorie":"Rechnung","beschreibung":"Amazon-Rechnung-USB-Kabel"}
+
+Finanzamt Detmold Einkommensteuerbescheid 2023:
+{"datum":"2024-06-00","kategorie":"Finanzamt","beschreibung":"Finanzamt-Detmold-EkSt-Bescheid-2023"}
+
+Hausarzt Beckmann Ueberweisung zum Radiologen:
+{"datum":"2025-01-15","kategorie":"Arzt","beschreibung":"Beckmann-Ueberweisung-Radiologie"}
+
+Sparkasse Lemgo Kontoauszug Maerz 2025:
+{"datum":"2025-03-00","kategorie":"Rechnung","beschreibung":"Sparkasse-Lemgo-Kontoauszug-Maerz-2025"}
+
+Arbeitsvertrag Bauhaus fuer Maike Wiesbrock:
+{"datum":"2023-04-01","kategorie":"Arbeit","beschreibung":"Bauhaus-Arbeitsvertrag-Wiesbrock"}
+
+Telekom Mobilfunk-Rechnung Februar 2025:
+{"datum":"2025-02-00","kategorie":"Rechnung","beschreibung":"Telekom-Mobilfunk-Rechnung-Februar-2025"}
+
+FALSCH (zu generisch): {"beschreibung":"Schreiben"} oder {"beschreibung":"Brief-vom-Amt"}
+RICHTIG (spezifisch): {"beschreibung":"Finanzamt-Detmold-EkSt-Bescheid-2023"}
+
+Antworte ausschliesslich mit validem JSON:
+{
+  "datum": "JJJJ-MM-TT",
+  "kategorie": "...",
+  "beschreibung": "..."
+}
+Kein Markdown, keine Code-Blocks.
+PROMPT
+    log "Default Dateinamen-Prompt geschrieben: ${PROMPT_FILENAME_FILE}"
+  fi
+
+  if [[ "${reset}" == "true" ]]; then
+    warn "KI-Prompts auf Default zurueckgesetzt. Bitte 'Reset Prompts' in der Addon-Config wieder deaktivieren."
+  fi
+}
+
+# ---------------------------------------------------------------------------
+
 write_ai_config() {
   local api_key paperless_url paperless_token ha_notify min_konfidenz log_level claude_access
+  local custom_tags_rules custom_filename_rules
 
   api_key="$(opt '.anthropic_api_key // ""')"
   paperless_url="$(opt '.paperless_url // "http://ca5234a0-paperless-ngx:8000"')"
@@ -668,6 +824,8 @@ write_ai_config() {
   ha_notify="$(opt '.ha_notify_target // "notify.persistent_notification"')"
   min_konfidenz="$(opt '.min_konfidenz // 0.7')"
   claude_access="$(opt '.claude_access_type // "api_key"')"
+  custom_tags_rules="$(opt '.custom_tags_rules // ""')"
+  custom_filename_rules="$(opt '.custom_filename_rules // ""')"
   log_level="INFO"
 
   if [[ "$claude_access" == "none" ]]; then
@@ -699,6 +857,10 @@ ha_token:          "${ha_token}"
 ha_notify_target:  "${ha_notify}"
 min_konfidenz:     ${min_konfidenz}
 log_level:         "${log_level}"
+prompt_tags_file:         "${PROMPT_TAGS_FILE}"
+prompt_filename_file:     "${PROMPT_FILENAME_FILE}"
+custom_tags_rules:        "$(yaml_escape "${custom_tags_rules}")"
+custom_filename_rules:    "$(yaml_escape "${custom_filename_rules}")"
 YAML
 
   chmod 600 "${AI_CONFIG_FILE}"
@@ -732,6 +894,18 @@ start_datenfresser() {
   log "Starte Datenfresser (Folder Watcher)..."
   nohup /opt/venv/bin/python3 "${AI_SCRIPTS_DIR}/datenfresser.py" >> /data/datenfresser.log 2>&1 &
   log "Datenfresser im Hintergrund gestartet"
+}
+
+start_ha_sensors() {
+  # HA-Sensoren nur starten wenn Supervisor-Token vorhanden
+  if [[ -z "${SUPERVISOR_TOKEN:-}" ]]; then
+    log "HA-Sensor-Daemon uebersprungen (kein SUPERVISOR_TOKEN)"
+    return 0
+  fi
+
+  log "Starte HA-Sensor-Daemon..."
+  nohup /opt/venv/bin/python3 "${AI_SCRIPTS_DIR}/ha_sensors.py" >> /data/ha_sensors.log 2>&1 &
+  log "HA-Sensor-Daemon im Hintergrund gestartet"
 }
 
 main() {
@@ -883,15 +1057,17 @@ main() {
     return 1
   fi
 
-  # --- KI-Scripts starten -------------------------------------------
+  # --- KI-Prompts + Scripts starten ---------------------------------
+  write_default_prompts
   if write_ai_config; then
     start_ai_cron
   else
     log "KI-Klassifikation uebersprungen (fehlende Konfiguration)"
   fi
 
-  # --- Datenfresser starten ------------------------------------------
+  # --- Datenfresser + HA-Sensoren starten ------------------------------
   start_datenfresser
+  start_ha_sensors
 
   log "Nutze scanservjs App-Verzeichnis: ${app_dir}"
   cd "${app_dir}"

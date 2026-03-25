@@ -49,20 +49,45 @@ Du extrahierst Tags, Personen und Firmen aus einem deutschen Haushaltsdokument.
 Personen : Wiesbrock (Christian, Maike), Schiefer, Hollmann
 Orte     : Oerlinghausen, Helpup, Nedderhof, Detmold, Bielefeld
 Firmen   : Bauhaus, Shell, BKK, Sparkasse Lemgo, Riverty, Amazon,
-           Finanzamt Detmold, Klinikum Bielefeld, Hausarzt Beckmann
+           Finanzamt Detmold, Klinikum Bielefeld, Hausarzt Beckmann,
+           Telekom, Vodafone, E.ON, Stadtwerke Bielefeld, ADAC
 
 ## Pflicht-Tags je Dokumenttyp
 - Lohn / Lohnsteuer             -> Tags MUSS [Sparkasse] enthalten
 - Kranken- / Sozialversicherung -> Tags MUSS [Versicherung] enthalten
 - Rezepte                       -> Tags MUSS [Rezepte] enthalten
 - Haus-Bauakten (Hollmann)      -> Tags MUSS [Hollmann] UND [Helpup] enthalten
+- Rechnungen / Mahnungen        -> Tags MUSS Firmenname enthalten
+- Steuer / Finanzamt            -> Tags MUSS [Steuer] UND Jahr enthalten
+- Versicherungen (nicht KK)     -> Tags MUSS [Versicherung] UND Versicherer enthalten
+- Arbeitsvertrag / Kuendigung   -> Tags MUSS [Arbeit] UND Arbeitgeber enthalten
 
 ## Regeln
 - Keine Umlaute: ae oe ue ss
 - Keine Leerzeichen; Woerter mit Bindestrich trennen
 - Tags: Personen, Firmen, Orte, Jahre, Themen – maximal 10
-- Kein generisches "Scan" als Tag
+- Kein generisches "Scan", "Dokument", "Seite" oder "Brief" als Tag
 - Bevorzuge bekannte Stammdaten fuer Tags/Person/Firma
+- Bei Rechnungen: Rechnungsnummer NICHT als Tag verwenden
+- Jahreszahl als Tag nur wenn im Dokument erkennbar (z.B. "2024")
+- person = die Person an die das Dokument gerichtet ist (Empfaenger)
+- firma = der Absender / ausstellende Organisation
+
+## Referenzbeispiele
+Lohnabrechnung Bauhaus fuer Maike Wiesbrock, Januar 2024:
+{"tags":["Bauhaus","Wiesbrock","Lohn","2024","Sparkasse"],"person":"Maike Wiesbrock","firma":"Bauhaus","konfidenz":0.95}
+
+BKK Krankengeld-Bescheinigung fuer Christian Wiesbrock:
+{"tags":["BKK","Wiesbrock","Versicherung","Krankengeld","2025"],"person":"Christian Wiesbrock","firma":"BKK","konfidenz":0.90}
+
+Amazon Rechnung ueber USB-Kabel, 15.02.2025:
+{"tags":["Amazon","Rechnung","2025","Online-Kauf"],"person":null,"firma":"Amazon","konfidenz":0.92}
+
+Finanzamt Detmold Einkommensteuerbescheid 2023:
+{"tags":["Finanzamt-Detmold","Steuer","Einkommensteuer","2023","Wiesbrock"],"person":"Christian Wiesbrock","firma":"Finanzamt Detmold","konfidenz":0.95}
+
+FALSCH (zu generisch): {"tags":["Scan","Dokument","Brief"],...}
+FALSCH (Rechnungsnr): {"tags":["INV-2024-00815"],...}
 
 Antworte ausschliesslich mit validem JSON:
 {
@@ -82,20 +107,55 @@ Du erzeugst strukturierte Metadaten fuer den Dateinamen eines deutschen Haushalt
 Haus | Arzt | Finanzamt | Krankenkasse | Lohnsteuer | Lohn |
 Sozialversicherung | Rechnung | Arbeit | Sonstiges
 
+## Kategorie-Zuordnung (Entscheidungshilfe)
+- Arztbrief, Befund, Rezept, Ueberweisung     -> Arzt
+- Lohnabrechnung, Gehaltsnachweis              -> Lohn
+- Lohnsteuerbescheinigung, Lohnsteuer-Jahres   -> Lohnsteuer
+- Krankenkasse, Krankengeld, AU-Bescheinigung  -> Krankenkasse
+- Rentenversicherung, Sozialvers.-Nachweis     -> Sozialversicherung
+- Steuerbescheid, Finanzamt, EkSt, USt         -> Finanzamt
+- Kaufvertrag, Grundbuch, Baugenehmigung       -> Haus
+- Rechnung, Mahnung, Quittung, Bestellung      -> Rechnung
+- Arbeitsvertrag, Kuendigung, Zeugnis          -> Arbeit
+- Alles andere                                 -> Sonstiges
+
 ## Regeln
 - Datum aus Dokumentinhalt extrahieren; bei Unklarheit: "0000-00-00"
   Partielle Daten erlaubt: "2024-01-00" (Monat bekannt, Tag nicht)
 - Keine Umlaute: ae oe ue ss
 - Keine Leerzeichen; Woerter mit Bindestrich trennen
 - Beschreibung: praegnant, 2-5 Woerter, auf Deutsch
-- Kein generisches "Scan" in der Beschreibung
+- Beschreibung MUSS den Absender/Firma enthalten
+- Beschreibung MUSS den Dokumenttyp benennen (z.B. Rechnung, Bescheid, Abrechnung)
+- Kein generisches "Scan", "Dokument" oder "Brief" in der Beschreibung
 
-## Referenzbeispiele
+## Referenzbeispiele (8 Stueck)
 Lohnabrechnung Maike Wiesbrock, Bauhaus, Januar 2024:
 {"datum":"2024-01-00","kategorie":"Lohn","beschreibung":"Bauhaus-Verdienstabrechnung-Januar-2024"}
 
 BKK Krankengeld-Bescheinigung 01.03.2025:
 {"datum":"2025-03-01","kategorie":"Krankenkasse","beschreibung":"BKK-Krankengeld-Ende-AU"}
+
+Amazon Rechnung USB-Kabel 15.02.2025:
+{"datum":"2025-02-15","kategorie":"Rechnung","beschreibung":"Amazon-Rechnung-USB-Kabel"}
+
+Finanzamt Detmold Einkommensteuerbescheid 2023:
+{"datum":"2024-06-00","kategorie":"Finanzamt","beschreibung":"Finanzamt-Detmold-EkSt-Bescheid-2023"}
+
+Hausarzt Beckmann Ueberweisung zum Radiologen:
+{"datum":"2025-01-15","kategorie":"Arzt","beschreibung":"Beckmann-Ueberweisung-Radiologie"}
+
+Sparkasse Lemgo Kontoauszug Maerz 2025:
+{"datum":"2025-03-00","kategorie":"Rechnung","beschreibung":"Sparkasse-Lemgo-Kontoauszug-Maerz-2025"}
+
+Arbeitsvertrag Bauhaus fuer Maike Wiesbrock:
+{"datum":"2023-04-01","kategorie":"Arbeit","beschreibung":"Bauhaus-Arbeitsvertrag-Wiesbrock"}
+
+Telekom Mobilfunk-Rechnung Februar 2025:
+{"datum":"2025-02-00","kategorie":"Rechnung","beschreibung":"Telekom-Mobilfunk-Rechnung-Februar-2025"}
+
+FALSCH (zu generisch): {"beschreibung":"Schreiben"} oder {"beschreibung":"Brief-vom-Amt"}
+RICHTIG (spezifisch): {"beschreibung":"Finanzamt-Detmold-EkSt-Bescheid-2023"}
 
 Antworte ausschliesslich mit validem JSON:
 {
@@ -106,11 +166,33 @@ Antworte ausschliesslich mit validem JSON:
 Kein Markdown, keine Code-Blocks.\
 """
 
+def _load_prompt(file_path: str, fallback: str, extra_rules: str = "") -> str:
+    """Laedt Prompt aus Datei, faellt auf Hardcoded-Default zurueck.
+
+    Haengt optionale Zusatzregeln an.
+    """
+    prompt = fallback
+    if file_path:
+        p = Path(file_path)
+        if p.is_file():
+            try:
+                content = p.read_text(encoding="utf-8").strip()
+                if content:
+                    prompt = content
+            except OSError:
+                pass  # Fallback verwenden
+
+    if extra_rules and extra_rules.strip():
+        prompt += f"\n\n## Zusaetzliche Regeln\n{extra_rules.strip()}"
+
+    return prompt
+
+
 FALLBACK_RESULT: dict = {
     "datum": "0000-00-00",
     "kategorie": "Sonstiges",
     "beschreibung": "Unbekannt",
-    "tags": ["Pruefen"],
+    "tags": ["KI-Fehler"],
     "person": None,
     "firma": None,
     "konfidenz": 0.0,
@@ -125,6 +207,21 @@ class ClaudeNamer:
     def __init__(self, config: dict, logger: logging.Logger, redis_client=None) -> None:
         self.logger = logger
         self.client = anthropic.Anthropic(api_key=config["anthropic_api_key"])
+
+        # Prompts laden (Datei > Hardcoded, plus optionale Config-Regeln)
+        self.prompt_tags = _load_prompt(
+            config.get("prompt_tags_file", ""),
+            SYSTEM_PROMPT_TAGS,
+            config.get("custom_tags_rules", ""),
+        )
+        self.prompt_filename = _load_prompt(
+            config.get("prompt_filename_file", ""),
+            SYSTEM_PROMPT_FILENAME,
+            config.get("custom_filename_rules", ""),
+        )
+        tags_src = config.get("prompt_tags_file") or "builtin"
+        fname_src = config.get("prompt_filename_file") or "builtin"
+        self.logger.info(f"Prompts geladen: tags={tags_src}, filename={fname_src}")
 
         # Cache initialisieren
         self.cache = None
@@ -148,18 +245,18 @@ class ClaudeNamer:
         Nutzt Cache wenn konfiguriert.
         """
         # Cache-Check
+        input_hash = hashlib.md5(ocr_text.encode()).hexdigest() if self.cache else None
         if self.cache:
-            input_hash = hashlib.md5(ocr_text.encode()).hexdigest()
             cached = self.cache.get(input_hash)
             if cached:
                 return cached["result"]
 
         tags_result = self._call_with_retry(
-            ocr_text, SYSTEM_PROMPT_TAGS, ["tags", "person", "firma", "konfidenz"],
+            ocr_text, self.prompt_tags, ["tags", "person", "firma", "konfidenz"],
             context="Tags"
         )
         filename_result = self._call_with_retry(
-            ocr_text, SYSTEM_PROMPT_FILENAME, ["datum", "kategorie", "beschreibung"],
+            ocr_text, self.prompt_filename, ["datum", "kategorie", "beschreibung"],
             context="Dateiname"
         )
 
@@ -175,8 +272,7 @@ class ClaudeNamer:
         self._normalize(result)
 
         # Cache speichern
-        if self.cache:
-            input_hash = hashlib.md5(ocr_text.encode()).hexdigest()
+        if self.cache and input_hash:
             self.cache.set(input_hash, result, ttl_seconds=self.cache_ttl)
 
         return result

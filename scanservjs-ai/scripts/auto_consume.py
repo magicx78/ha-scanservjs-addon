@@ -284,7 +284,7 @@ def main() -> None:
                 return
 
             # --- 4. Claude API: Klassifikation (fallback wenn kein Datenfresser-Cache) ---
-            result = namer.classify(ocr_text[:3000])
+            result = namer.classify(ocr_text[:5000])
 
         # --- 5. Paperless-Metadaten aktualisieren ---
         title = build_title(result)
@@ -314,15 +314,24 @@ def main() -> None:
         if md5:
             checker.register_document(md5, doc_filename, doc_id)
 
-        # --- 8. KI-Verarbeitet-Marker setzen ---
-        paperless.add_tag(doc_id, "KI-Verarbeitet")
+        # --- 8. KI-Verarbeitet-Marker setzen (nur bei echter Klassifikation) ---
+        is_fallback = (konfidenz == 0.0 and "KI-Fehler" in (result.get("tags") or []))
+        if not is_fallback:
+            paperless.add_tag(doc_id, "KI-Verarbeitet")
 
         # --- 9. KI-Status für scanservjs UI schreiben ---
         _write_ki_status(title, result.get("tags") or [], doc_id)
 
         # --- 10. Erfolgs-Benachrichtigung ---
-        notifier.notify_success(title, result.get("kategorie", "?"), konfidenz)
-        logger.info(f"Dokument {doc_id} erfolgreich verarbeitet: {title}")
+        if is_fallback:
+            notifier.notify_warning(
+                f"KI-Klassifikation fehlgeschlagen fuer Dokument {doc_id} ({doc_filename}) "
+                f"– bitte manuell pruefen"
+            )
+            logger.warning(f"Dokument {doc_id} mit KI-Fehler-Fallback verarbeitet: {title}")
+        else:
+            notifier.notify_success(title, result.get("kategorie", "?"), konfidenz)
+            logger.info(f"Dokument {doc_id} erfolgreich verarbeitet: {title}")
 
     except Exception as exc:
         # Paperless laeuft weiter – kein sys.exit(1)
