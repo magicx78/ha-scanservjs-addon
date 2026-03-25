@@ -1,4 +1,58 @@
 configuration:
+  claude_access_type:
+    name: Claude access type
+    description: "Type of Claude access: api_key for API key, subscription for existing Claude subscription, none to disable."
+  anthropic_api_key:
+    name: Anthropic API key
+    description: "API key for Claude AI. Required when claude_access_type is set to api_key."
+  paperless_url:
+    name: Paperless-ngx URL
+    description: "URL to the Paperless-ngx instance, e.g. http://ca5234a0-paperless-ngx:8000"
+  paperless_token:
+    name: Paperless-ngx token
+    description: "API token for Paperless-ngx (generate under Admin > API Tokens)."
+  min_konfidenz:
+    name: Minimum AI confidence
+    description: "Threshold (0.0-1.0) above which AI classification is considered reliable. Below this value a [Review] tag is set."
+  ai_poll_interval:
+    name: AI poll interval (minutes)
+    description: "How often (in minutes) to check for new documents in Paperless. Default: 5."
+  ha_url:
+    name: Home Assistant URL
+    description: "URL to the Home Assistant instance. Automatically set via Supervisor."
+  ha_token:
+    name: Home Assistant token
+    description: "Long-lived access token for HA. Automatically set via Supervisor."
+  ha_notify_target:
+    name: HA notification target
+    description: "Notify service for AI notifications, e.g. notify.persistent_notification or notify.mobile_app_phone."
+  ha_automation_entity_id:
+    name: HA automation entity ID
+    description: "Optional entity ID of an HA automation triggered on new documents."
+  cache_enabled:
+    name: Enable AI cache
+    description: "Enables the classification cache (SQLite). Reduces API calls for repeated documents."
+  cache_db_path:
+    name: Cache database path
+    description: "Path to the SQLite cache database. Default: /data/cache_classifications.db"
+  cache_ttl_seconds:
+    name: Cache TTL (seconds)
+    description: "Validity period of cached classifications in seconds. Default: 86400 (24 hours)."
+  redis_url:
+    name: Redis URL (optional)
+    description: "Optional Redis URL for L1 cache in distributed setups, e.g. redis://redis:6379."
+  datenfresser_enabled:
+    name: Enable Datenfresser
+    description: "Enables the folder watcher for automatic document processing."
+  datenfresser_path:
+    name: Datenfresser inbox path
+    description: "Folder monitored for new documents. Default: /share/datenfresser/inbox"
+  datenfresser_duplicates_path:
+    name: Datenfresser duplicates path
+    description: "Folder for detected duplicates. Default: /share/datenfresser/duplicates"
+  datenfresser_poll_interval:
+    name: Datenfresser poll interval (seconds)
+    description: "How often (in seconds) the inbox folder is checked. Default: 30."
   saned_net_hosts:
     name: SANE network hosts
     description: Semicolon-separated hosts appended to /etc/sane.d/net.conf.

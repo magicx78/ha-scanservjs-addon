@@ -17,13 +17,13 @@ class TestPaperlessAPI:
         assert api is not None
 
     def test_init_missing_url(self, mock_logger):
-        """Test: Fehler bei fehlender Paperless-URL."""
+        """Test: KeyError bei fehlender Paperless-URL."""
         from paperless_api import PaperlessAPI
 
         config = {"paperless_token": "token"}
-        # Sollte Error werfen oder graceful handhaben
-        api = PaperlessAPI(config, mock_logger)
-        assert api is not None
+        # paperless_url ist Pflichtfeld — KeyError erwartet
+        with pytest.raises(KeyError):
+            PaperlessAPI(config, mock_logger)
 
     @patch("paperless_api.requests.Session")
     def test_update_document_success(
@@ -64,11 +64,12 @@ class TestPaperlessAPI:
 
         api = PaperlessAPI(mock_config, mock_logger)
         result = api.update_document(
-            doc_id="123", title="Test", tags=[], correspondent=None
+            doc_id="123", title="Test", tags=[], correspondent=None,
+            document_type=None, created=None,
         )
 
-        # Sollte Fehler gracefully handhaben
-        assert mock_logger.error.called
+        # Sollte Fehler gracefully handhaben und False zurueckgeben
+        assert result is False
 
     @patch("paperless_api.requests.Session")
     def test_add_tag_new_tag(self, mock_session_class, mock_logger, mock_config):
@@ -144,13 +145,15 @@ class TestPaperlessAPI:
 
         mock_session = MagicMock()
         mock_session_class.return_value = mock_session
-        mock_session.get.return_value = MagicMock(status_code=404)
+        mock_resp = MagicMock(status_code=404)
+        mock_resp.raise_for_status.side_effect = requests.HTTPError("404 Not Found")
+        mock_session.get.return_value = mock_resp
 
         api = PaperlessAPI(mock_config, mock_logger)
         content = api.get_document_content("999")
 
-        # Sollte leer oder None zurückgeben
-        assert content == "" or content is None
+        # raise_for_status() wirft bei 404, wird abgefangen -> leerer String
+        assert content == ""
 
     @patch("paperless_api.requests.Session")
     def test_connection_timeout(

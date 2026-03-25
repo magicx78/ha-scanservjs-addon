@@ -1,4 +1,58 @@
 configuration:
+  claude_access_type:
+    name: Claude-Zugangstyp
+    description: "Art des Claude-Zugangs: api_key fuer API-Schluessel, subscription fuer bestehende Claude-Subscription, none fuer deaktiviert."
+  anthropic_api_key:
+    name: Anthropic API-Schluessel
+    description: "API-Key fuer Claude AI. Erforderlich wenn claude_access_type auf api_key gesetzt ist."
+  paperless_url:
+    name: Paperless-ngx URL
+    description: "URL zur Paperless-ngx Instanz, z.B. http://ca5234a0-paperless-ngx:8000"
+  paperless_token:
+    name: Paperless-ngx Token
+    description: "API-Token fuer Paperless-ngx (unter Admin > API Tokens generieren)."
+  min_konfidenz:
+    name: Minimale KI-Konfidenz
+    description: "Schwellwert (0.0–1.0) ab dem die KI-Klassifikation als vertrauenswuerdig gilt. Unter diesem Wert wird [Pruefen]-Tag gesetzt."
+  ai_poll_interval:
+    name: KI-Poll-Intervall (Minuten)
+    description: "Wie oft (in Minuten) nach neuen Dokumenten in Paperless gesucht wird. Standard: 5."
+  ha_url:
+    name: Home Assistant URL
+    description: "URL zur Home Assistant Instanz. Wird automatisch ueber Supervisor gesetzt."
+  ha_token:
+    name: Home Assistant Token
+    description: "Long-Lived Access Token fuer HA. Wird automatisch ueber Supervisor gesetzt."
+  ha_notify_target:
+    name: HA Benachrichtigungs-Ziel
+    description: "Notify-Service fuer KI-Benachrichtigungen, z.B. notify.persistent_notification oder notify.mobile_app_phone."
+  ha_automation_entity_id:
+    name: HA Automation Entity-ID
+    description: "Optionale Entity-ID einer HA-Automation die bei neuen Dokumenten getriggert wird."
+  cache_enabled:
+    name: KI-Cache aktivieren
+    description: "Aktiviert den Classification-Cache (SQLite). Reduziert API-Calls bei wiederholten Dokumenten."
+  cache_db_path:
+    name: Cache-Datenbankpfad
+    description: "Pfad zur SQLite-Cache-Datenbank. Standard: /data/cache_classifications.db"
+  cache_ttl_seconds:
+    name: Cache-TTL (Sekunden)
+    description: "Gueltigkeitsdauer gecachter Klassifikationen in Sekunden. Standard: 86400 (24 Stunden)."
+  redis_url:
+    name: Redis URL (optional)
+    description: "Optionale Redis-URL fuer L1-Cache in verteilten Setups, z.B. redis://redis:6379."
+  datenfresser_enabled:
+    name: Datenfresser aktivieren
+    description: "Aktiviert den Folder-Watcher fuer automatische Dokumentenverarbeitung."
+  datenfresser_path:
+    name: Datenfresser Inbox-Pfad
+    description: "Ordner der auf neue Dokumente ueberwacht wird. Standard: /share/datenfresser/inbox"
+  datenfresser_duplicates_path:
+    name: Datenfresser Duplikate-Pfad
+    description: "Ordner fuer erkannte Duplikate. Standard: /share/datenfresser/duplicates"
+  datenfresser_poll_interval:
+    name: Datenfresser Poll-Intervall (Sekunden)
+    description: "Wie oft (in Sekunden) der Inbox-Ordner geprueft wird. Standard: 30."
   saned_net_hosts:
     name: SANE-Netzwerk-Hosts
     description: Per Semikolon getrennte Hosts, die an /etc/sane.d/net.conf angehaengt werden.

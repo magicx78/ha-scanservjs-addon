@@ -817,15 +817,25 @@ PROMPT
 write_ai_config() {
   local api_key paperless_url paperless_token ha_notify min_konfidenz log_level claude_access
   local custom_tags_rules custom_filename_rules
+  local ha_automation_entity_id cache_enabled cache_db_path cache_ttl_seconds redis_url
+  local datenfresser_path datenfresser_duplicates_path datenfresser_poll_interval
 
   api_key="$(opt '.anthropic_api_key // ""')"
   paperless_url="$(opt '.paperless_url // "http://ca5234a0-paperless-ngx:8000"')"
   paperless_token="$(opt '.paperless_token // ""')"
   ha_notify="$(opt '.ha_notify_target // "notify.persistent_notification"')"
+  ha_automation_entity_id="$(opt '.ha_automation_entity_id // ""')"
   min_konfidenz="$(opt '.min_konfidenz // 0.7')"
   claude_access="$(opt '.claude_access_type // "api_key"')"
   custom_tags_rules="$(opt '.custom_tags_rules // ""')"
   custom_filename_rules="$(opt '.custom_filename_rules // ""')"
+  cache_enabled="$(opt '.cache_enabled // true')"
+  cache_db_path="$(opt '.cache_db_path // "/data/cache_classifications.db"')"
+  cache_ttl_seconds="$(opt '.cache_ttl_seconds // 86400')"
+  redis_url="$(opt '.redis_url // ""')"
+  datenfresser_path="$(opt '.datenfresser_path // "/share/datenfresser/inbox"')"
+  datenfresser_duplicates_path="$(opt '.datenfresser_duplicates_path // "/share/datenfresser/duplicates"')"
+  datenfresser_poll_interval="$(opt '.datenfresser_poll_interval // 30')"
   log_level="INFO"
 
   if [[ "$claude_access" == "none" ]]; then
@@ -855,12 +865,20 @@ anthropic_api_key:  "${api_key}"
 ha_url:            "${ha_url}"
 ha_token:          "${ha_token}"
 ha_notify_target:  "${ha_notify}"
+ha_automation_entity_id: "${ha_automation_entity_id}"
 min_konfidenz:     ${min_konfidenz}
 log_level:         "${log_level}"
 prompt_tags_file:         "${PROMPT_TAGS_FILE}"
 prompt_filename_file:     "${PROMPT_FILENAME_FILE}"
 custom_tags_rules:        "$(yaml_escape "${custom_tags_rules}")"
 custom_filename_rules:    "$(yaml_escape "${custom_filename_rules}")"
+cache_enabled:     ${cache_enabled}
+cache_db_path:     "${cache_db_path}"
+cache_ttl_seconds: ${cache_ttl_seconds}
+redis_url:         "${redis_url}"
+datenfresser_path:           "${datenfresser_path}"
+datenfresser_duplicates_path: "${datenfresser_duplicates_path}"
+datenfresser_poll_interval:  ${datenfresser_poll_interval}
 YAML
 
   chmod 600 "${AI_CONFIG_FILE}"

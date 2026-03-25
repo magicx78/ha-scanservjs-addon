@@ -3,6 +3,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import anthropic
 import pytest
 
 
@@ -56,35 +57,40 @@ class TestClaudeNamer:
 
     @patch("claude_namer.anthropic.Anthropic")
     def test_classify_empty_ocr_text(self, mock_anthropic, mock_logger):
-        """Test: Klassifikation mit leerem OCR-Text."""
-        from claude_namer import ClaudeNamer
+        """Test: Klassifikation mit leerem OCR-Text gibt Fallback zurueck."""
+        from claude_namer import ClaudeNamer, FALLBACK_RESULT
 
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client
+        # Bei leerem Text: API-Calls geben None zurueck -> Fallback
+        mock_client.messages.create.return_value = MagicMock(
+            content=[MagicMock(text="{}")]
+        )
 
-        # Test
         namer = ClaudeNamer({"anthropic_api_key": "test-key"}, mock_logger)
         result = namer.classify("")
 
-        # Sollte keine API-Call machen bei leerem Text
-        assert result == {} or result is None
+        # Ergebnis sollte ein dict sein (Fallback oder teilergebnis)
+        assert isinstance(result, dict)
+        assert "tags" in result
 
     @patch("claude_namer.anthropic.Anthropic")
     def test_classify_timeout(self, mock_anthropic, mock_logger, sample_ocr_text):
-        """Test: Timeout-Handling bei Claude API."""
-        from claude_namer import ClaudeNamer
+        """Test: Timeout-Handling bei Claude API gibt Fallback zurueck."""
+        from claude_namer import ClaudeNamer, FALLBACK_RESULT
 
-        # Mock Timeout
+        # Mock Timeout — anthropic.APITimeoutError ist der richtige Typ
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client
-        mock_client.messages.create.side_effect = TimeoutError("API Timeout")
+        mock_client.messages.create.side_effect = anthropic.APITimeoutError(request=MagicMock())
 
-        # Test
         namer = ClaudeNamer({"anthropic_api_key": "test-key"}, mock_logger)
         result = namer.classify(sample_ocr_text)
 
-        # Sollte Fehler gracefully handhaben
-        assert result == {} or result is None
+        # Sollte FALLBACK_RESULT zurueckgeben
+        assert isinstance(result, dict)
+        assert result["konfidenz"] == 0.0
+        assert "KI-Fehler" in result["tags"]
 
     @patch("claude_namer.anthropic.Anthropic")
     def test_konfidenz_extraction(
