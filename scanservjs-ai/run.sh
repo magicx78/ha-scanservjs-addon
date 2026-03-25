@@ -994,6 +994,27 @@ main() {
     mkdir -p "$COPY_SCANS_TO" || true
   fi
 
+  # --- Verwaiste Scans retten ------------------------------------------------
+  # Beim Addon-Update/Neustart: Scan-Dateien die noch in /data/output liegen
+  # (z.B. weil convert fehlte) in die Datenfresser-Inbox verschieben,
+  # damit sie automatisch weiterverarbeitet werden.
+  local datenfresser_inbox
+  datenfresser_inbox="$(opt '.datenfresser_path // "/share/datenfresser/inbox"')"
+  if [[ -d /data/output && -n "$datenfresser_inbox" && "$datenfresser_inbox" != "null" ]]; then
+    local rescue_count=0
+    mkdir -p "$datenfresser_inbox" 2>/dev/null || true
+    shopt -s nullglob
+    for scan_file in /data/output/button_*.{tif,tiff,jpg,jpeg,pdf,png}; do
+      if [[ -s "$scan_file" ]]; then
+        mv "$scan_file" "$datenfresser_inbox/" && rescue_count=$((rescue_count + 1))
+      fi
+    done
+    shopt -u nullglob
+    if [[ "$rescue_count" -gt 0 ]]; then
+      log "Scan-Rescue: ${rescue_count} verwaiste Scan-Datei(en) aus /data/output nach ${datenfresser_inbox}/ verschoben"
+    fi
+  fi
+
   if [[ -n "$SANED_NET_HOSTS" && "$SANED_NET_HOSTS" != "null" ]]; then
     while IFS= read -r host; do
       ensure_line "$host" "/etc/sane.d/net.conf"

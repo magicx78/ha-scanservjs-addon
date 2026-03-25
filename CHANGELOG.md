@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.3.5] - 2026-03-25
+
+### Added
+- **Scan-Rescue beim Start:** Verwaiste Scan-Dateien (TIFF/JPG/PDF) in `/data/output` werden beim Addon-Neustart automatisch in die Datenfresser-Inbox verschoben. Scans gehen bei Updates nicht mehr verloren.
+
 ## [2.3.4] - 2026-03-25
 
 ### Fixed
