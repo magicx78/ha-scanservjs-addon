@@ -1,5 +1,5 @@
 name: "scanservjs + KI (Paperless-AI)"
-version: "2.6.0"
+version: "2.7.0"
 slug: "scanservjs_ai"
 description: "Scanner Web-UI mit automatischer KI-Dokumentenklassifikation. Scans landen direkt in Paperless-ngx – Titel, Tags und Korrespondenten werden automatisch per Claude AI vergeben."
 url: "https://github.com/magicx78/ha-scanservjs-addon"
@@ -47,6 +47,11 @@ options:
   paperless_token: ""
   min_konfidenz: 0.7
   ai_poll_interval: 5
+
+  # --- Re-Classify (bestehende Dokumente neu klassifizieren) --------
+  reclassify_on_start: false
+  reclassify_filter: ""
+  reclassify_max_docs: 50
 
   # --- KI-Prompt Anpassung ----------------------------------------
   custom_tags_rules: ""
@@ -128,6 +133,11 @@ schema:
   paperless_token: str?
   min_konfidenz: float?
   ai_poll_interval: int?
+
+  # --- Re-Classify ------------------------------------------------
+  reclassify_on_start: bool?
+  reclassify_filter: str?
+  reclassify_max_docs: int?
 
   # --- KI-Prompt Anpassung ----------------------------------------
   custom_tags_rules: str?

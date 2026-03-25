@@ -893,6 +893,8 @@ cache_enabled:     ${cache_enabled}
 cache_db_path:     "${cache_db_path}"
 cache_ttl_seconds: ${cache_ttl_seconds}
 redis_url:         "${redis_url}"
+reclassify_filter:   "$(yaml_escape "$(opt '.reclassify_filter // ""')")"
+reclassify_max_docs: $(opt '.reclassify_max_docs // 50')
 datenfresser_path:           "${datenfresser_path}"
 datenfresser_duplicates_path: "${datenfresser_duplicates_path}"
 datenfresser_poll_interval:  ${datenfresser_poll_interval}
@@ -929,6 +931,19 @@ start_datenfresser() {
   log "Starte Datenfresser (Folder Watcher)..."
   nohup /opt/venv/bin/python3 "${AI_SCRIPTS_DIR}/datenfresser.py" >> /data/datenfresser.log 2>&1 &
   log "Datenfresser im Hintergrund gestartet"
+}
+
+start_reclassify() {
+  local enabled
+  enabled="$(opt '.reclassify_on_start // false')"
+
+  if [[ "${enabled}" != "true" ]]; then
+    return 0
+  fi
+
+  log "Re-Classify: Starte einmalige Neu-Klassifikation bestehender Dokumente..."
+  nohup /opt/venv/bin/python3 "${AI_SCRIPTS_DIR}/reclassify.py" >> /data/reclassify.log 2>&1 &
+  log "Re-Classify im Hintergrund gestartet (PID: $!)"
 }
 
 start_upload_server() {
@@ -1156,6 +1171,9 @@ main() {
   else
     log "KI-Klassifikation uebersprungen (fehlende Konfiguration)"
   fi
+
+  # --- Re-Classify starten (einmalig, wenn aktiviert) --------------------
+  start_reclassify
 
   # --- Upload-Server starten (Handy/Browser-Upload) ---------------------
   start_upload_server

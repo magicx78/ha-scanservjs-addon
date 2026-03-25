@@ -5,6 +5,15 @@ configuration:
   anthropic_api_key:
     name: Anthropic API key
     description: "API key for Claude AI. Required for api_key and pro_plan. Pro users: generate key at console.anthropic.com."
+  reclassify_on_start:
+    name: Re-Classify on start
+    description: "Re-classify existing Paperless documents via AI on addon start (title, tags, correspondent). Disable again after run."
+  reclassify_filter:
+    name: Re-Classify filter
+    description: "Which documents to re-classify: empty = unprocessed, 'all' = all, 'untagged' = without tags, 'tag:Sonstiges' = specific tag, 'older_than:30d' = older than N days."
+  reclassify_max_docs:
+    name: Re-Classify max documents
+    description: "Maximum documents per run. Protects against high AI costs. Default: 50."
   ollama_url:
     name: Ollama URL
     description: "URL to the Ollama instance, e.g. http://localhost:11434 or http://192.168.1.100:11434. Only when claude_access_type=ollama."

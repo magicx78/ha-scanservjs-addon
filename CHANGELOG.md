@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.7.0] - 2026-03-25
+
+### Added
+- **Re-Classify:** Bestehende Paperless-Dokumente nachtraeglich per KI neu klassifizieren (Titel, Tags, Korrespondent, Dokumenttyp). Flexibler Filter: alle, ohne Tags, bestimmter Tag, aelter als N Tage.
+  - Neues Config-Feld `reclassify_on_start` (Standard: false — laeuft beim Addon-Start)
+  - Neues Config-Feld `reclassify_filter` (leer, "all", "untagged", "tag:NAME", "older_than:30d")
+  - Neues Config-Feld `reclassify_max_docs` (Standard: 50 — Kostenschutz)
+  - Setzt Tag "Re-Klassifiziert" zur Nachverfolgung
+  - Rate-Limiting (2s Pause), Cache-Nutzung, HA-Benachrichtigung
+
 ## [2.6.0] - 2026-03-25
 
 ### Added
