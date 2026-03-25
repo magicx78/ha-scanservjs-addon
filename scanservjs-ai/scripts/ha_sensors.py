@@ -33,16 +33,29 @@ UPDATE_INTERVAL = 60  # Sekunden
 
 
 def load_config() -> dict:
-    cfg_path = SCRIPT_DIR.parent / "config.yaml"
+    """Laedt Config aus /opt/paperless-ai/config.yaml + Env-Variablen.
+
+    Prioritaet: Env-Var > config.yaml
+    Im Addon-Container ist SUPERVISOR_TOKEN automatisch gesetzt.
+    """
+    cfg_path = SCRIPT_DIR / "config.yaml"  # /opt/paperless-ai/config.yaml
     try:
         with open(cfg_path, encoding="utf-8") as fh:
             cfg = yaml.safe_load(fh) or {}
     except FileNotFoundError:
         cfg = {}
-    for key, env_var in (("ha_url", "HA_URL"), ("ha_token", "HA_TOKEN")):
+    # Env-Variablen ueberschreiben config.yaml (Supervisor setzt SUPERVISOR_TOKEN)
+    for key, env_var in (
+        ("ha_url", "HA_URL"),
+        ("ha_token", "HA_TOKEN"),
+        ("ha_token", "SUPERVISOR_TOKEN"),
+    ):
         val = os.environ.get(env_var)
         if val:
             cfg[key] = val
+    # Im Addon-Container: Supervisor-URL verwenden wenn kein ha_url gesetzt
+    if not cfg.get("ha_url") and os.environ.get("SUPERVISOR_TOKEN"):
+        cfg["ha_url"] = "http://supervisor/core"
     return cfg
 
 

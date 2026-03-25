@@ -922,8 +922,9 @@ start_ha_sensors() {
   fi
 
   log "Starte HA-Sensor-Daemon..."
-  nohup /opt/venv/bin/python3 "${AI_SCRIPTS_DIR}/ha_sensors.py" >> /data/ha_sensors.log 2>&1 &
-  log "HA-Sensor-Daemon im Hintergrund gestartet"
+  SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN}" \
+    nohup /opt/venv/bin/python3 "${AI_SCRIPTS_DIR}/ha_sensors.py" >> /data/ha_sensors.log 2>&1 &
+  log "HA-Sensor-Daemon im Hintergrund gestartet (PID: $!)"
 }
 
 main() {
@@ -1079,12 +1080,12 @@ main() {
   write_default_prompts
   if write_ai_config; then
     start_ai_cron
+    start_datenfresser
   else
     log "KI-Klassifikation uebersprungen (fehlende Konfiguration)"
   fi
 
-  # --- Datenfresser + HA-Sensoren starten ------------------------------
-  start_datenfresser
+  # --- HA-Sensoren starten (unabhaengig von KI-Config) -----------------
   start_ha_sensors
 
   log "Nutze scanservjs App-Verzeichnis: ${app_dir}"
