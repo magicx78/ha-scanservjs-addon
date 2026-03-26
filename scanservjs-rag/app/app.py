@@ -242,16 +242,15 @@ def tab_suche():
 
             st.markdown(f"**🧠 Schritt 3 / 3** — Antwort generieren mit **{model_name}** …")
             prog.progress(75, text=f"Generiere mit {model_name} …")
-            answer = rag.answer(question, chunks)
-            prog.progress(100, text="Fertig ✅")
 
-            status.update(label="✅ Suche abgeschlossen", state="complete", expanded=False)
-
+        # Antwort-Box außerhalb des status-Blocks: Live-Streaming sichtbar
+        st.markdown("### Antwort")
+        answer_box = st.empty()
+        answer = rag.answer(question, chunks, stream_placeholder=answer_box)
+        prog.progress(100, text="Fertig ✅")
+        status.update(label="✅ Suche abgeschlossen", state="complete", expanded=False)
         time.sleep(0.6)
         prog.empty()
-
-        st.markdown("### Antwort")
-        st.markdown(answer)
 
         if chunks:
             st.markdown("### Quellen")
