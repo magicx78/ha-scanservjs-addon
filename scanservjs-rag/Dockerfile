@@ -1,15 +1,17 @@
-ARG BUILD_FROM=python:3.11-slim-bookworm
+ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
-# System-Abhängigkeiten
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# System-Abhängigkeiten (Alpine apk)
+RUN apk add --no-cache \
     tesseract-ocr \
-    tesseract-ocr-deu \
-    tesseract-ocr-eng \
+    tesseract-ocr-data-deu \
+    tesseract-ocr-data-eng \
     poppler-utils \
-    libmagic1 \
+    file \
     jq \
-    && rm -rf /var/lib/apt/lists/*
+    gcc \
+    musl-dev \
+    python3-dev
 
 # Python-Abhängigkeiten
 COPY app/requirements.txt /tmp/requirements.txt

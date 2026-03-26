@@ -1,2 +1,2 @@
 build_from:
-  amd64: "python:3.11-slim-bookworm"
+  amd64: "ghcr.io/home-assistant/amd64-base-python:3.11"
