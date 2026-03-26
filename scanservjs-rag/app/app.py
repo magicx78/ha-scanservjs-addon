@@ -20,22 +20,25 @@ from lib.chunker import DocumentChunker, SUPPORTED_EXTENSIONS
 from lib.embedder import OllamaEmbedder
 from lib.rag import RAGEngine
 from lib.vector_db import VectorDB
-from lib.watcher import FolderWatcher
+from lib.watcher import FolderWatcher, MultiWatcher
 
 # ---------------------------------------------------------------------------
 # Konfiguration aus Umgebungsvariablen (gesetzt von run.sh)
 # ---------------------------------------------------------------------------
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://homeassistant.local:11434")
-OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
-OLLAMA_LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "qwen2.5:14b")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-USE_CLAUDE = os.environ.get("USE_CLAUDE", "false").lower() == "true"
-WATCH_FOLDER = os.environ.get("WATCH_FOLDER", "/share/paperless/consume")
-MAX_RESULTS = int(os.environ.get("MAX_RESULTS", "5"))
-OCR_LANG = os.environ.get("OCR_LANG", "deu+eng")
-CHROMADB_PATH = os.environ.get("CHROMADB_PATH", "/data/chromadb")
-UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/data/uploads")
+OLLAMA_URL          = os.environ.get("OLLAMA_URL", "http://homeassistant.local:11434")
+OLLAMA_EMBED_MODEL  = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+OLLAMA_LLM_MODEL    = os.environ.get("OLLAMA_LLM_MODEL", "qwen2.5:14b")
+ANTHROPIC_API_KEY   = os.environ.get("ANTHROPIC_API_KEY", "")
+USE_CLAUDE          = os.environ.get("USE_CLAUDE", "false").lower() == "true"
+MAX_RESULTS         = int(os.environ.get("MAX_RESULTS", "5"))
+OCR_LANG            = os.environ.get("OCR_LANG", "deu+eng")
+CHROMADB_PATH       = os.environ.get("CHROMADB_PATH", "/data/chromadb")
+UPLOAD_FOLDER       = os.environ.get("UPLOAD_FOLDER", "/data/uploads")
+
+# Zwei Watch-Ordner
+PAPERLESS_ARCHIVE   = os.environ.get("PAPERLESS_ARCHIVE", "/share/paperless/media/documents/archive")
+INBOX_FOLDER        = os.environ.get("INBOX_FOLDER", "/share/rag-inbox")
 
 # ---------------------------------------------------------------------------
 # Seitenconfig
@@ -73,28 +76,43 @@ def get_rag() -> RAGEngine:
 
 
 @st.cache_resource
-def get_watcher() -> FolderWatcher | None:
-    if not WATCH_FOLDER or WATCH_FOLDER == "null":
-        return None
-
+def get_multi_watcher() -> MultiWatcher:
     db = get_db()
     embedder = get_embedder()
 
-    watcher = FolderWatcher(
-        watch_folder=WATCH_FOLDER,
-        db=db,
-        embedder=embedder,
-        ocr_lang=OCR_LANG,
-    )
+    watchers = []
 
-    # Bestehende Dateien beim Start indexieren (Background-Thread)
-    threading.Thread(target=watcher.index_existing, daemon=True).start()
-    watcher.start()
-    return watcher
+    # Watcher 1: Paperless archive (rekursiv — Unterordner nach Jahr/Monat)
+    if PAPERLESS_ARCHIVE and PAPERLESS_ARCHIVE != "null":
+        watchers.append(FolderWatcher(
+            watch_folder=PAPERLESS_ARCHIVE,
+            db=db,
+            embedder=embedder,
+            ocr_lang=OCR_LANG,
+            source_label="paperless",
+            recursive=True,
+        ))
+
+    # Watcher 2: Eigener Inbox-Ordner (flach)
+    if INBOX_FOLDER and INBOX_FOLDER != "null":
+        Path(INBOX_FOLDER).mkdir(parents=True, exist_ok=True)
+        watchers.append(FolderWatcher(
+            watch_folder=INBOX_FOLDER,
+            db=db,
+            embedder=embedder,
+            ocr_lang=OCR_LANG,
+            source_label="inbox",
+            recursive=False,
+        ))
+
+    mw = MultiWatcher(watchers)
+    mw.index_all_existing()   # Bestand indexieren (Background)
+    mw.start_all()            # Live-Watch starten
+    return mw
 
 
 # Watcher beim Start initialisieren
-_watcher = get_watcher()
+_multi_watcher = get_multi_watcher()
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +134,6 @@ def _index_file_bytes(filename: str, file_bytes: bytes) -> tuple[bool, str]:
     if db.is_indexed(md5):
         return False, f"'{filename}' ist bereits indexiert (Duplikat übersprungen)."
 
-    # Temp-Datei für Chunker
     suffix = Path(filename).suffix
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(file_bytes)
@@ -125,25 +142,35 @@ def _index_file_bytes(filename: str, file_bytes: bytes) -> tuple[bool, str]:
     try:
         chunks = chunker.chunk_file(tmp_path)
         if not chunks:
-            return False, f"Kein Text aus '{filename}' extrahierbar (leeres Dokument oder OCR-Fehler)."
+            return False, f"Kein Text aus '{filename}' extrahierbar."
 
-        # Chunks bekommen den echten Dateinamen
+        dest = Path(UPLOAD_FOLDER) / filename
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(file_bytes)
+
         for c in chunks:
             c["filename"] = filename
-            c["source"] = str(Path(UPLOAD_FOLDER) / filename)
+            c["source"] = str(dest)
+            c["source_label"] = "upload"
             c["md5"] = md5
 
         embeddings = [embedder.embed(c["text"]) for c in chunks]
         added = db.add_document(filename, chunks, embeddings)
 
-        # Datei in Upload-Ordner speichern für Downloads
-        dest = Path(UPLOAD_FOLDER) / filename
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(file_bytes)
-
         return True, f"'{filename}' indexiert — {added} Chunks."
     finally:
         tmp_path.unlink(missing_ok=True)
+
+
+# Quelle → Icon + Label
+SOURCE_ICONS = {
+    "paperless": "📄 Paperless",
+    "inbox":     "📥 Inbox",
+    "upload":    "📤 Hochgeladen",
+}
+
+def source_label(label: str) -> str:
+    return SOURCE_ICONS.get(label, f"📁 {label}")
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +183,7 @@ def tab_suche():
     db = get_db()
     stats = db.get_stats()
     if stats["total_documents"] == 0:
-        st.info("Noch keine Dokumente indexiert. Lade Dokumente über den Tab 'Hochladen' hoch oder lege Dateien in den Watch-Ordner.")
+        st.info("Noch keine Dokumente indexiert. Paperless-Archiv und Inbox werden automatisch überwacht.")
         return
 
     st.caption(f"{stats['total_documents']} Dokumente · {stats['total_chunks']} Chunks indexiert")
@@ -172,7 +199,7 @@ def tab_suche():
         search_btn = st.button("Suchen", type="primary", use_container_width=True)
 
     if search_btn and question.strip():
-        with st.spinner(f"Suche mit {OLLAMA_LLM_MODEL}..."):
+        with st.spinner(f"Suche ..."):
             embedder = get_embedder()
             rag = get_rag()
 
@@ -190,10 +217,11 @@ def tab_suche():
         if chunks:
             st.markdown("### Quellen")
             for i, chunk in enumerate(chunks, start=1):
-                rel = chunk.get("relevance_score", 0)
+                rel   = chunk.get("relevance_score", 0)
                 fname = chunk.get("filename", "?")
-                page = chunk.get("page", "?")
-                with st.expander(f"Quelle {i}: {fname} — Seite {page} (Relevanz {rel:.0%})"):
+                page  = chunk.get("page", "?")
+                src   = source_label(chunk.get("source_label", ""))
+                with st.expander(f"Quelle {i}: {fname} — Seite {page} · {src} (Relevanz {rel:.0%})"):
                     st.text(chunk.get("text", ""))
 
 
@@ -203,6 +231,13 @@ def tab_suche():
 
 def tab_hochladen():
     st.header("Dokument hochladen & indexieren")
+
+    st.info(
+        f"**Automatisch überwacht:**\n"
+        f"- 📄 Paperless-Archiv: `{PAPERLESS_ARCHIVE}`\n"
+        f"- 📥 Inbox: `{INBOX_FOLDER}`\n\n"
+        f"Oder hier direkt hochladen:"
+    )
 
     ext_list = ", ".join(sorted(SUPPORTED_EXTENSIONS))
     st.caption(f"Unterstützte Formate: {ext_list}")
@@ -243,36 +278,42 @@ def tab_dokumente():
         st.info("Keine Dokumente indexiert.")
         return
 
-    st.caption(f"{len(docs)} Dokumente")
-
+    # Gruppierung nach Quelle
+    by_source: dict[str, list] = {}
     for doc in docs:
-        col1, col2, col3 = st.columns([5, 2, 1])
-        with col1:
-            st.text(f"{doc['filename']} ({doc['chunk_count']} Chunks)")
-        with col2:
-            # Download-Button wenn Datei vorhanden
-            file_path = Path(doc.get("source", ""))
-            if not file_path.exists():
-                # Auch im Upload-Ordner suchen
-                alt_path = Path(UPLOAD_FOLDER) / doc["filename"]
-                if alt_path.exists():
-                    file_path = alt_path
+        lbl = doc.get("source_label", "unbekannt")
+        by_source.setdefault(lbl, []).append(doc)
 
-            if file_path.exists():
-                with open(file_path, "rb") as f:
-                    st.download_button(
-                        label="Download",
-                        data=f.read(),
-                        file_name=doc["filename"],
-                        key=f"dl_{doc['filename']}",
-                    )
-            else:
-                st.caption("Datei nicht lokal")
-        with col3:
-            if st.button("Löschen", key=f"del_{doc['filename']}", type="secondary"):
-                deleted = db.delete_document(doc["filename"])
-                st.success(f"{doc['filename']} gelöscht ({deleted} Chunks).")
-                st.rerun()
+    st.caption(f"{len(docs)} Dokumente insgesamt")
+
+    for lbl, group in by_source.items():
+        with st.expander(f"{source_label(lbl)} ({len(group)} Dokumente)", expanded=True):
+            for doc in group:
+                col1, col2, col3 = st.columns([5, 2, 1])
+                with col1:
+                    st.text(f"{doc['filename']} ({doc['chunk_count']} Chunks)")
+                with col2:
+                    file_path = Path(doc.get("source", ""))
+                    if not file_path.exists():
+                        alt_path = Path(UPLOAD_FOLDER) / doc["filename"]
+                        if alt_path.exists():
+                            file_path = alt_path
+
+                    if file_path.exists():
+                        with open(file_path, "rb") as f:
+                            st.download_button(
+                                label="Download",
+                                data=f.read(),
+                                file_name=doc["filename"],
+                                key=f"dl_{lbl}_{doc['filename']}",
+                            )
+                    else:
+                        st.caption("Datei nicht lokal")
+                with col3:
+                    if st.button("🗑", key=f"del_{lbl}_{doc['filename']}", help="Löschen"):
+                        deleted = db.delete_document(doc["filename"])
+                        st.success(f"{doc['filename']} gelöscht ({deleted} Chunks).")
+                        st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +345,15 @@ def tab_status():
 
     st.divider()
 
+    # Watcher Status
+    st.subheader("Watch-Ordner")
+    for w in _multi_watcher.watchers:
+        status = "🟢 aktiv" if w.is_running else "🔴 inaktiv"
+        icon = SOURCE_ICONS.get(w._source_label, w._source_label)
+        st.text(f"{status}  {icon}: {w._watch_folder}")
+
+    st.divider()
+
     # ChromaDB Stats
     st.subheader("Datenbank (ChromaDB)")
     stats = db.get_stats()
@@ -317,15 +367,15 @@ def tab_status():
     # Konfiguration
     st.subheader("Konfiguration")
     config_data = {
-        "Ollama URL": OLLAMA_URL,
-        "Embedding-Modell": OLLAMA_EMBED_MODEL,
-        "LLM-Modell": OLLAMA_LLM_MODEL,
-        "LLM-Modus": "Claude API" if USE_CLAUDE else f"Ollama ({OLLAMA_LLM_MODEL})",
-        "Watch-Ordner": WATCH_FOLDER or "deaktiviert",
-        "Watch aktiv": str(_watcher.is_running if _watcher else False),
-        "OCR-Sprachen": OCR_LANG,
-        "Max. Ergebnisse": str(MAX_RESULTS),
-        "ChromaDB-Pfad": CHROMADB_PATH,
+        "Ollama URL":           OLLAMA_URL,
+        "Embedding-Modell":     OLLAMA_EMBED_MODEL,
+        "LLM-Modell":           OLLAMA_LLM_MODEL,
+        "LLM-Modus":            "Claude API" if USE_CLAUDE else f"Ollama ({OLLAMA_LLM_MODEL})",
+        "Paperless-Archiv":     PAPERLESS_ARCHIVE,
+        "Inbox-Ordner":         INBOX_FOLDER,
+        "OCR-Sprachen":         OCR_LANG,
+        "Max. Ergebnisse":      str(MAX_RESULTS),
+        "ChromaDB-Pfad":        CHROMADB_PATH,
     }
     for key, val in config_data.items():
         col1, col2 = st.columns([2, 3])
@@ -337,9 +387,9 @@ def tab_status():
 # Haupt-Layout
 # ---------------------------------------------------------------------------
 
-st.title("Dokumentensuche")
+st.title("🔍 Dokumentensuche")
 
-tab1, tab2, tab3, tab4 = st.tabs(["Suche", "Hochladen", "Dokumente", "Status"])
+tab1, tab2, tab3, tab4 = st.tabs(["💬 Suche", "📤 Hochladen", "📁 Dokumente", "⚙️ Status"])
 
 with tab1:
     tab_suche()

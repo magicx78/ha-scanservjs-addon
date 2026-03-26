@@ -1,5 +1,5 @@
 name: "scanservjs RAG Dokumentensuche"
-version: "1.0.1"
+version: "1.0.2"
 slug: "scanservjs-rag"
 description: "Lokale KI-Dokumentensuche (RAG) für gescannte Dokumente mit Ollama und ChromaDB."
 url: "https://github.com/magicx78/ha-scanservjs-addon"
@@ -33,7 +33,8 @@ options:
   ollama_llm_model: "qwen2.5:14b"
   anthropic_api_key: ""
   use_claude: false
-  watch_folder: "/share/paperless/consume"
+  paperless_archive: "/share/paperless/media/documents/archive"
+  inbox_folder: "/share/rag-inbox"
   max_results: 5
   ocr_lang: "deu+eng"
 
@@ -43,6 +44,7 @@ schema:
   ollama_llm_model: str
   anthropic_api_key: str?
   use_claude: bool
-  watch_folder: str?
+  paperless_archive: str?
+  inbox_folder: str?
   max_results: int
   ocr_lang: str?

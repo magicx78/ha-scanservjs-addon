@@ -1,8 +1,9 @@
 """
-Watch-Folder: Überwacht einen Ordner auf neue Dokumente und indexiert sie automatisch.
+Watch-Folder: Überwacht einen oder mehrere Ordner auf neue Dokumente und indexiert sie automatisch.
 
-Nutzt watchdog für Filesystem-Events.
-Wird als Background-Thread in Streamlit gestartet.
+Unterstützt:
+- Paperless archive (/share/paperless/media/documents/archive) — rekursiv
+- Eigener Inbox-Ordner (/share/rag-inbox) — flach
 """
 
 import logging
@@ -27,11 +28,13 @@ class _DocumentHandler(FileSystemEventHandler):
         db: VectorDB,
         embedder: OllamaEmbedder,
         chunker: DocumentChunker,
+        source_label: str = "watch",
         on_indexed: callable = None,
     ):
         self._db = db
         self._embedder = embedder
         self._chunker = chunker
+        self._source_label = source_label
         self._on_indexed = on_indexed
         self._processing: set[str] = set()
         self._lock = threading.Lock()
@@ -66,34 +69,33 @@ class _DocumentHandler(FileSystemEventHandler):
             if not file_path.exists():
                 return
 
-            # Warten bis Datei stabil ist
             if not self._wait_for_file(path):
                 logger.warning(f"Datei-Timeout: {path}")
                 return
 
-            # Duplikat-Check
             md5 = calculate_md5(file_path)
             if self._db.is_indexed(md5):
                 logger.info(f"Bereits indexiert (MD5): {file_path.name}")
                 return
 
-            logger.info(f"Indexiere: {file_path.name}")
+            logger.info(f"[{self._source_label}] Indexiere: {file_path.name}")
 
-            # Chunken
             chunks = self._chunker.chunk_file(file_path)
             if not chunks:
                 logger.warning(f"Keine Chunks extrahiert: {file_path.name}")
                 return
 
-            # Einbetten
-            embeddings = [self._embedder.embed(c["text"]) for c in chunks]
+            # Quelle in Metadaten speichern
+            for c in chunks:
+                c["source_label"] = self._source_label
+                c["source"] = str(file_path)
 
-            # Speichern
+            embeddings = [self._embedder.embed(c["text"]) for c in chunks]
             added = self._db.add_document(file_path.name, chunks, embeddings)
-            logger.info(f"Indexiert: {file_path.name} — {added} Chunks")
+            logger.info(f"[{self._source_label}] Indexiert: {file_path.name} — {added} Chunks")
 
             if self._on_indexed:
-                self._on_indexed(file_path.name, added)
+                self._on_indexed(file_path.name, added, self._source_label)
 
         except Exception as exc:
             logger.error(f"Fehler beim Indexieren von {path}: {exc}", exc_info=True)
@@ -127,18 +129,21 @@ class FolderWatcher:
         db: VectorDB,
         embedder: OllamaEmbedder,
         ocr_lang: str = "deu+eng",
+        source_label: str = "watch",
+        recursive: bool = False,
         on_indexed: callable = None,
     ):
         self._watch_folder = watch_folder
         self._db = db
         self._embedder = embedder
         self._chunker = DocumentChunker(ocr_lang=ocr_lang)
+        self._source_label = source_label
+        self._recursive = recursive
         self._on_indexed = on_indexed
         self._observer: Observer | None = None
         self._running = False
 
     def start(self):
-        """Startet den Watcher in einem Background-Thread."""
         if self._running:
             return
 
@@ -151,13 +156,14 @@ class FolderWatcher:
             db=self._db,
             embedder=self._embedder,
             chunker=self._chunker,
+            source_label=self._source_label,
             on_indexed=self._on_indexed,
         )
         self._observer = Observer()
-        self._observer.schedule(handler, str(folder), recursive=False)
+        self._observer.schedule(handler, str(folder), recursive=self._recursive)
         self._observer.start()
         self._running = True
-        logger.info(f"Watch-Ordner aktiv: {self._watch_folder}")
+        logger.info(f"Watch aktiv [{self._source_label}]: {self._watch_folder} (rekursiv={self._recursive})")
 
     def stop(self):
         if self._observer and self._running:
@@ -175,7 +181,9 @@ class FolderWatcher:
         if not folder.exists():
             return
 
-        for file_path in sorted(folder.iterdir()):
+        glob = folder.rglob("*") if self._recursive else folder.iterdir()
+
+        for file_path in sorted(glob):
             if file_path.is_file() and DocumentChunker.is_supported(file_path):
                 try:
                     md5 = calculate_md5(file_path)
@@ -186,12 +194,48 @@ class FolderWatcher:
                     if not chunks:
                         continue
 
+                    for c in chunks:
+                        c["source_label"] = self._source_label
+                        c["source"] = str(file_path)
+
                     embeddings = [self._embedder.embed(c["text"]) for c in chunks]
                     added = self._db.add_document(file_path.name, chunks, embeddings)
-                    logger.info(f"Erstlauf indexiert: {file_path.name} — {added} Chunks")
+                    logger.info(f"[{self._source_label}] Erstlauf: {file_path.name} — {added} Chunks")
 
                     if self._on_indexed:
-                        self._on_indexed(file_path.name, added)
+                        self._on_indexed(file_path.name, added, self._source_label)
 
                 except Exception as exc:
                     logger.error(f"Erstlauf Fehler {file_path.name}: {exc}")
+
+
+class MultiWatcher:
+    """Verwaltet mehrere FolderWatcher gleichzeitig."""
+
+    def __init__(self, watchers: list[FolderWatcher]):
+        self._watchers = watchers
+
+    def start_all(self):
+        for w in self._watchers:
+            w.start()
+
+    def index_all_existing(self):
+        """Indexiert Bestandsdokumente aller Watcher (in separaten Threads)."""
+        threads = []
+        for w in self._watchers:
+            t = threading.Thread(target=w.index_existing, daemon=True)
+            t.start()
+            threads.append(t)
+        return threads
+
+    def stop_all(self):
+        for w in self._watchers:
+            w.stop()
+
+    @property
+    def running_count(self) -> int:
+        return sum(1 for w in self._watchers if w.is_running)
+
+    @property
+    def watchers(self) -> list[FolderWatcher]:
+        return self._watchers

@@ -17,7 +17,8 @@ export OLLAMA_EMBED_MODEL=$(jq -r '.ollama_embed_model // "nomic-embed-text"' "$
 export OLLAMA_LLM_MODEL=$(jq -r '.ollama_llm_model // "qwen2.5:14b"' "${CONFIG_PATH}")
 export ANTHROPIC_API_KEY=$(jq -r '.anthropic_api_key // ""' "${CONFIG_PATH}")
 export USE_CLAUDE=$(jq -r '.use_claude // false' "${CONFIG_PATH}")
-export WATCH_FOLDER=$(jq -r '.watch_folder // "/share/paperless/consume"' "${CONFIG_PATH}")
+export PAPERLESS_ARCHIVE=$(jq -r '.paperless_archive // "/share/paperless/media/documents/archive"' "${CONFIG_PATH}")
+export INBOX_FOLDER=$(jq -r '.inbox_folder // "/share/rag-inbox"' "${CONFIG_PATH}")
 export MAX_RESULTS=$(jq -r '.max_results // 5' "${CONFIG_PATH}")
 export OCR_LANG=$(jq -r '.ocr_lang // "deu+eng"' "${CONFIG_PATH}")
 export CHROMADB_PATH="/data/chromadb"
@@ -25,16 +26,15 @@ export UPLOAD_FOLDER="/data/uploads"
 
 # Verzeichnisse sicherstellen
 mkdir -p "${CHROMADB_PATH}" "${UPLOAD_FOLDER}"
-if [[ -n "${WATCH_FOLDER}" && "${WATCH_FOLDER}" != "null" ]]; then
-    mkdir -p "${WATCH_FOLDER}" 2>/dev/null || true
-fi
+mkdir -p "${INBOX_FOLDER}" 2>/dev/null || true
 
-log "Starte scanservjs-rag v1.0.0"
-log "Ollama URL:    ${OLLAMA_URL}"
-log "Embed Modell:  ${OLLAMA_EMBED_MODEL}"
-log "LLM Modell:    ${OLLAMA_LLM_MODEL}"
-log "Watch Ordner:  ${WATCH_FOLDER}"
-log "ChromaDB:      ${CHROMADB_PATH}"
+log "Starte scanservjs-rag v1.0.2"
+log "Ollama URL:         ${OLLAMA_URL}"
+log "Embed Modell:       ${OLLAMA_EMBED_MODEL}"
+log "LLM Modell:         ${OLLAMA_LLM_MODEL}"
+log "Paperless Archiv:   ${PAPERLESS_ARCHIVE}"
+log "Inbox Ordner:       ${INBOX_FOLDER}"
+log "ChromaDB:           ${CHROMADB_PATH}"
 
 exec streamlit run /app/app.py \
     --server.port 7860 \
