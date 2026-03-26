@@ -173,81 +173,6 @@ def source_label(label: str) -> str:
     return SOURCE_ICONS.get(label, f"📁 {label}")
 
 
-# CSS für Suchanimation — einmalig als Konstante
-_SEARCH_CSS = """
-<style>
-@keyframes rag-spin {
-    to { transform: rotate(360deg); }
-}
-@keyframes rag-pulse {
-    0%,100% { opacity:1; } 50% { opacity:0.4; }
-}
-.rag-step-box {
-    background: #0d1b2e;
-    border: 1px solid #1e3a5f;
-    border-radius: 14px;
-    padding: 1.25rem 1.5rem;
-    margin: 0.5rem 0;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-.rag-step-row {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-}
-.rag-spinner {
-    width: 34px; height: 34px;
-    border: 3px solid #1e3a5f;
-    border-top-color: #60a5fa;
-    border-radius: 50%;
-    animation: rag-spin 0.75s linear infinite;
-    flex-shrink: 0;
-}
-.rag-step-text { flex: 1; }
-.rag-step-num  { color: #60a5fa; font-weight: 700; font-size: 0.8rem; letter-spacing: .06em; text-transform: uppercase; }
-.rag-step-desc { color: #e2e8f0; font-size: 0.95rem; margin-top: 2px; animation: rag-pulse 1.6s ease-in-out infinite; }
-.rag-bar-track { height: 5px; background: #1e3a5f; border-radius: 3px; overflow: hidden; }
-.rag-bar-fill  { height: 100%; border-radius: 3px;
-    background: linear-gradient(90deg, #2563eb, #60a5fa, #93c5fd);
-    background-size: 200% 100%;
-    animation: rag-shift 1.5s ease infinite; }
-@keyframes rag-shift { 0%{background-position:0%} 100%{background-position:200%} }
-.rag-done-box {
-    background: #052e16;
-    border: 1px solid #166534;
-    border-radius: 14px;
-    padding: 1rem 1.5rem;
-    display: flex; align-items: center; gap: 12px;
-    color: #86efac; font-weight: 600; font-size: 1rem;
-}
-</style>
-"""
-
-def _render_step(step: int, total: int, desc: str) -> str:
-    pct = int(step / total * 100)
-    return f"""
-{_SEARCH_CSS}
-<div class="rag-step-box">
-  <div class="rag-step-row">
-    <div class="rag-spinner"></div>
-    <div class="rag-step-text">
-      <div class="rag-step-num">Schritt {step} / {total}</div>
-      <div class="rag-step-desc">{desc}</div>
-    </div>
-  </div>
-  <div class="rag-bar-track"><div class="rag-bar-fill" style="width:{pct}%"></div></div>
-</div>
-"""
-
-def _render_done() -> str:
-    return f"""
-{_SEARCH_CSS}
-<div class="rag-done-box">
-  <span style="font-size:1.4rem">✅</span> Suche abgeschlossen
-</div>
-"""
 
 
 # ---------------------------------------------------------------------------
@@ -290,28 +215,40 @@ def tab_suche():
     do_search = st.session_state.pop("_do_search", False)
 
     if do_search and question.strip():
-        embedder = get_embedder()
-        rag      = get_rag()
-        anim     = st.empty()
-
-        # Schritt 1
-        anim.markdown(_render_step(1, 3, "Frage in Vektor-Embedding umwandeln …"), unsafe_allow_html=True)
-        query_emb = embedder.embed(question)
-        if not query_emb:
-            anim.error("❌ Embedding fehlgeschlagen — ist Ollama erreichbar?")
-            return
-
-        # Schritt 2
-        anim.markdown(_render_step(2, 3, "Ähnliche Dokumente in ChromaDB suchen …"), unsafe_allow_html=True)
-        chunks = db.search(query_emb, n_results=MAX_RESULTS)
-
-        # Schritt 3
+        embedder   = get_embedder()
+        rag        = get_rag()
         model_name = "Claude API" if USE_CLAUDE else OLLAMA_LLM_MODEL
-        anim.markdown(_render_step(3, 3, f"Antwort generieren mit {model_name} …"), unsafe_allow_html=True)
-        answer = rag.answer(question, chunks)
 
-        # Fertig
-        anim.markdown(_render_done(), unsafe_allow_html=True)
+        # Nativer Streamlit Fortschrittsbalken (garantiert animiert)
+        prog = st.progress(0, text="Starte …")
+
+        # st.status zeigt eingebauten Lade-Spinner + Schritt-Log
+        with st.status("🔍 Suche läuft …", expanded=True) as status:
+
+            st.markdown("**⚡ Schritt 1 / 3** — Frage in Vektor-Embedding umwandeln …")
+            prog.progress(10, text="Embedding erstellen …")
+            query_emb = embedder.embed(question)
+            if not query_emb:
+                prog.empty()
+                status.update(label="❌ Fehler", state="error")
+                st.error("Embedding fehlgeschlagen — ist Ollama erreichbar?")
+                return
+            prog.progress(33, text="Embedding ✓")
+
+            st.markdown("**🔎 Schritt 2 / 3** — Ähnliche Dokumente in ChromaDB suchen …")
+            prog.progress(40, text="Dokumente suchen …")
+            chunks = db.search(query_emb, n_results=MAX_RESULTS)
+            prog.progress(66, text="Dokumente gefunden ✓")
+
+            st.markdown(f"**🧠 Schritt 3 / 3** — Antwort generieren mit **{model_name}** …")
+            prog.progress(75, text=f"Generiere mit {model_name} …")
+            answer = rag.answer(question, chunks)
+            prog.progress(100, text="Fertig ✅")
+
+            status.update(label="✅ Suche abgeschlossen", state="complete", expanded=False)
+
+        time.sleep(0.6)
+        prog.empty()
 
         st.markdown("### Antwort")
         st.markdown(answer)
