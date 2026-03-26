@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_PATH="/data/options.json"
+
+log() { echo "[INFO] $*"; }
+err() { echo "[ERROR] $*" >&2; }
+
+if [[ ! -f "${CONFIG_PATH}" ]]; then
+    err "Keine Addon-Konfiguration unter ${CONFIG_PATH} gefunden."
+    exit 1
+fi
+
+# Konfiguration als Umgebungsvariablen exportieren
+export OLLAMA_URL=$(jq -r '.ollama_url // "http://homeassistant.local:11434"' "${CONFIG_PATH}")
+export OLLAMA_EMBED_MODEL=$(jq -r '.ollama_embed_model // "nomic-embed-text"' "${CONFIG_PATH}")
+export OLLAMA_LLM_MODEL=$(jq -r '.ollama_llm_model // "qwen2.5:14b"' "${CONFIG_PATH}")
+export ANTHROPIC_API_KEY=$(jq -r '.anthropic_api_key // ""' "${CONFIG_PATH}")
+export USE_CLAUDE=$(jq -r '.use_claude // false' "${CONFIG_PATH}")
+export WATCH_FOLDER=$(jq -r '.watch_folder // "/share/paperless/consume"' "${CONFIG_PATH}")
+export MAX_RESULTS=$(jq -r '.max_results // 5' "${CONFIG_PATH}")
+export OCR_LANG=$(jq -r '.ocr_lang // "deu+eng"' "${CONFIG_PATH}")
+export CHROMADB_PATH="/data/chromadb"
+export UPLOAD_FOLDER="/data/uploads"
+
+# Verzeichnisse sicherstellen
+mkdir -p "${CHROMADB_PATH}" "${UPLOAD_FOLDER}"
+if [[ -n "${WATCH_FOLDER}" && "${WATCH_FOLDER}" != "null" ]]; then
+    mkdir -p "${WATCH_FOLDER}" 2>/dev/null || true
+fi
+
+log "Starte scanservjs-rag v1.0.0"
+log "Ollama URL:    ${OLLAMA_URL}"
+log "Embed Modell:  ${OLLAMA_EMBED_MODEL}"
+log "LLM Modell:    ${OLLAMA_LLM_MODEL}"
+log "Watch Ordner:  ${WATCH_FOLDER}"
+log "ChromaDB:      ${CHROMADB_PATH}"
+
+exec streamlit run /app/app.py \
+    --server.port 7860 \
+    --server.headless true \
+    --server.enableCORS false \
+    --server.enableXsrfProtection false \
+    --browser.gatherUsageStats false

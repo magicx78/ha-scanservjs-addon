@@ -1,0 +1,48 @@
+name: "scanservjs RAG Dokumentensuche"
+version: "1.0.0"
+slug: "scanservjs-rag"
+description: "Lokale KI-Dokumentensuche (RAG) für gescannte Dokumente mit Ollama und ChromaDB."
+url: "https://github.com/magicx78/ha-scanservjs-addon"
+
+arch:
+  - amd64
+
+init: false
+startup: services
+boot: auto
+
+ingress: true
+ingress_port: 7860
+panel_icon: "mdi:text-search"
+panel_title: "Dokumentensuche"
+host_network: false
+
+icon: icon.png
+logo: icon.png
+apparmor: true
+
+map:
+  - type: share
+    read_only: false
+  - type: data
+    read_only: false
+
+options:
+  ollama_url: "http://homeassistant.local:11434"
+  ollama_embed_model: "nomic-embed-text"
+  ollama_llm_model: "qwen2.5:14b"
+  anthropic_api_key: ""
+  use_claude: false
+  watch_folder: "/share/paperless/consume"
+  max_results: 5
+  ocr_lang: "deu+eng"
+
+schema:
+  ollama_url: str
+  ollama_embed_model: str
+  ollama_llm_model: str
+  anthropic_api_key: str?
+  use_claude: bool
+  watch_folder: str?
+  max_results: int
+  ocr_lang: str?
