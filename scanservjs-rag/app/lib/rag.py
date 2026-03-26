@@ -83,7 +83,7 @@ class RAGEngine:
             "stream": True,
             "options": {
                 "temperature": 0.1,
-                "num_predict": 600,
+                "num_predict": 400,
             },
         }
 
