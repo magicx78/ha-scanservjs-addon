@@ -188,28 +188,35 @@ def tab_suche():
 
     st.caption(f"{stats['total_documents']} Dokumente · {stats['total_chunks']} Chunks indexiert")
 
-    question = st.text_input(
-        "Frage stellen",
-        placeholder="z.B. Welche Rechnungen gibt es von 2024?",
-        key="search_input",
-    )
-
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        search_btn = st.button("Suchen", type="primary", use_container_width=True)
+    # Form → Enter-Taste löst Suche aus
+    with st.form("search_form", border=False):
+        question = st.text_input(
+            "Frage stellen",
+            placeholder="z.B. Welche Rechnungen gibt es von 2024?",
+        )
+        search_btn = st.form_submit_button("🔍 Suchen", type="primary", use_container_width=False)
 
     if search_btn and question.strip():
-        with st.spinner(f"Suche ..."):
-            embedder = get_embedder()
-            rag = get_rag()
+        embedder = get_embedder()
+        rag      = get_rag()
 
+        # Animierte Schritt-Anzeige
+        status_box = st.status("Suche läuft …", expanded=True)
+        with status_box:
+            st.write("⚡ Schritt 1 / 3 — Frage in Embedding umwandeln …")
             query_emb = embedder.embed(question)
             if not query_emb:
                 st.error("Embedding fehlgeschlagen — ist Ollama erreichbar?")
                 return
 
+            st.write("🔎 Schritt 2 / 3 — Relevante Dokumente suchen …")
             chunks = db.search(query_emb, n_results=MAX_RESULTS)
+
+            model_name = "Claude" if USE_CLAUDE else OLLAMA_LLM_MODEL
+            st.write(f"🧠 Schritt 3 / 3 — Antwort generieren mit {model_name} …")
             answer = rag.answer(question, chunks)
+
+        status_box.update(label="Fertig ✅", state="complete", expanded=False)
 
         st.markdown("### Antwort")
         st.markdown(answer)
