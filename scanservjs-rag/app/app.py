@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Lib-Pfad hinzufügen
 sys.path.insert(0, str(Path(__file__).parent))
@@ -176,6 +177,88 @@ def source_label(label: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Pac-Man Suchanimation
+# CSS wird einmalig in den DOM injiziert (eigener st.markdown-Block der
+# NICHT durch st.empty() ersetzt wird) → @keyframes bleiben erhalten
+# ---------------------------------------------------------------------------
+
+_PACMAN_CSS = """
+<style>
+@keyframes pm-chomp {
+    0%,100% { clip-path: polygon(50% 50%, 100% 12%, 100% 88%); }
+    50%      { clip-path: polygon(50% 50%, 100% 50%, 100% 50%); }
+}
+@keyframes pm-scroll {
+    from { transform: translateX(30px); }
+    to   { transform: translateX(-320px); }
+}
+@keyframes pm-pulse {
+    0%,100% { opacity: 1; } 50% { opacity: 0.35; }
+}
+.pm-box {
+    background: #0b1623; border: 1px solid #1e3a5f;
+    border-radius: 13px; padding: 18px 20px; margin: 6px 0;
+}
+.pm-num  { color: #60a5fa; font-size: 10px; font-weight: 800;
+           letter-spacing: .12em; text-transform: uppercase; margin-bottom: 5px; }
+.pm-desc { color: #e2e8f0; font-size: 15px; margin-bottom: 14px;
+           animation: pm-pulse 1.5s ease infinite; }
+.pm-row  { display: flex; align-items: center; height: 46px;
+           overflow: hidden; margin-bottom: 12px; }
+.pm-pac  {
+    width: 40px; height: 40px; background: #fbbf24; border-radius: 50%;
+    clip-path: polygon(50% 50%, 100% 12%, 100% 88%);
+    animation: pm-chomp 0.22s linear infinite;
+    flex-shrink: 0; position: relative; z-index: 2;
+    box-shadow: 0 0 12px #fbbf2488;
+}
+.pm-track {
+    display: flex; align-items: center; gap: 18px;
+    animation: pm-scroll 1.7s linear infinite;
+    padding-left: 10px; flex: 1;
+}
+.pm-dot { width: 9px; height: 9px; background: #60a5fa;
+          border-radius: 50%; box-shadow: 0 0 6px #60a5faaa; flex-shrink: 0; }
+.pm-doc { width: 8px; height: 10px; background: #93c5fd;
+          border-radius: 1px 3px 1px 1px;
+          box-shadow: 0 0 6px #93c5fdaa; flex-shrink: 0; }
+.pm-bar-bg   { height: 5px; background: #1e3a5f; border-radius: 3px; overflow: hidden; }
+.pm-bar-fill { height: 100%;
+               background: linear-gradient(90deg, #b45309, #f59e0b, #fbbf24);
+               border-radius: 3px; transition: width .45s ease; }
+.pm-done {
+    display: flex; align-items: center; gap: 12px;
+    background: #052e16; border: 1px solid #166534;
+    border-radius: 13px; padding: 14px 20px;
+    color: #86efac; font-weight: 700; font-size: 15px;
+}
+</style>
+"""
+
+_DOTS = "".join(['<div class="pm-doc"></div><div class="pm-dot"></div>'] * 12)
+
+
+def _pacman_step(step: int, total: int, desc: str, pct: int) -> str:
+    return f"""
+<div class="pm-box">
+  <div class="pm-num">Schritt {step} / {total}</div>
+  <div class="pm-desc">{desc}</div>
+  <div class="pm-row">
+    <div class="pm-pac"></div>
+    <div class="pm-track">{_DOTS}</div>
+  </div>
+  <div class="pm-bar-bg"><div class="pm-bar-fill" style="width:{pct}%"></div></div>
+</div>"""
+
+
+def _pacman_done() -> str:
+    return """<div class="pm-done">
+  <span style="font-size:24px">😊</span>
+  Alle Daten verarbeitet — Antwort bereit!
+</div>"""
+
+
+# ---------------------------------------------------------------------------
 # Tab 1: Suche
 # ---------------------------------------------------------------------------
 
@@ -214,43 +297,37 @@ def tab_suche():
 
     do_search = st.session_state.pop("_do_search", False)
 
+    # CSS einmalig injizieren (eigener DOM-Knoten, wird nicht überschrieben)
+    st.markdown(_PACMAN_CSS, unsafe_allow_html=True)
+
     if do_search and question.strip():
         embedder   = get_embedder()
         rag        = get_rag()
         model_name = "Claude API" if USE_CLAUDE else OLLAMA_LLM_MODEL
+        anim       = st.empty()
 
-        # Nativer Streamlit Fortschrittsbalken (garantiert animiert)
-        prog = st.progress(0, text="Starte …")
+        # Schritt 1 — Pac-Man frisst Vektoren
+        anim.markdown(_pacman_step(1, 3, "Frage in Vektor-Embedding umwandeln …", 15),
+                      unsafe_allow_html=True)
+        query_emb = embedder.embed(question)
+        if not query_emb:
+            anim.error("❌ Embedding fehlgeschlagen — ist Ollama erreichbar?")
+            return
 
-        # st.status zeigt eingebauten Lade-Spinner + Schritt-Log
-        with st.status("🔍 Suche läuft …", expanded=True) as status:
+        # Schritt 2 — Pac-Man frisst Dokumente
+        anim.markdown(_pacman_step(2, 3, "Ähnliche Dokumente in ChromaDB suchen …", 50),
+                      unsafe_allow_html=True)
+        chunks = db.search(query_emb, n_results=MAX_RESULTS)
 
-            st.markdown("**⚡ Schritt 1 / 3** — Frage in Vektor-Embedding umwandeln …")
-            prog.progress(10, text="Embedding erstellen …")
-            query_emb = embedder.embed(question)
-            if not query_emb:
-                prog.empty()
-                status.update(label="❌ Fehler", state="error")
-                st.error("Embedding fehlgeschlagen — ist Ollama erreichbar?")
-                return
-            prog.progress(33, text="Embedding ✓")
-
-            st.markdown("**🔎 Schritt 2 / 3** — Ähnliche Dokumente in ChromaDB suchen …")
-            prog.progress(40, text="Dokumente suchen …")
-            chunks = db.search(query_emb, n_results=MAX_RESULTS)
-            prog.progress(66, text="Dokumente gefunden ✓")
-
-            st.markdown(f"**🧠 Schritt 3 / 3** — Antwort generieren mit **{model_name}** …")
-            prog.progress(75, text=f"Generiere mit {model_name} …")
-
-        # Antwort-Box außerhalb des status-Blocks: Live-Streaming sichtbar
+        # Schritt 3 — Pac-Man frisst Tokens
+        anim.markdown(_pacman_step(3, 3, f"Antwort generieren mit {model_name} …", 80),
+                      unsafe_allow_html=True)
         st.markdown("### Antwort")
         answer_box = st.empty()
         answer = rag.answer(question, chunks, stream_placeholder=answer_box)
-        prog.progress(100, text="Fertig ✅")
-        status.update(label="✅ Suche abgeschlossen", state="complete", expanded=False)
-        time.sleep(0.6)
-        prog.empty()
+
+        # Fertig — satter Pac-Man
+        anim.markdown(_pacman_done(), unsafe_allow_html=True)
 
         if chunks:
             st.markdown("### Quellen")
