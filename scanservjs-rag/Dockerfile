@@ -1,19 +1,24 @@
 ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
-# System-Abhängigkeiten + Python (Alpine apk)
-RUN apk add --no-cache \
+# System-Abhängigkeiten (Debian bookworm, apt-get)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
-    py3-pip \
+    python3-pip \
+    python3-venv \
     tesseract-ocr \
-    tesseract-ocr-data-deu \
-    tesseract-ocr-data-eng \
+    tesseract-ocr-deu \
+    tesseract-ocr-eng \
     poppler-utils \
-    jq
+    jq \
+    && rm -rf /var/lib/apt/lists/*
 
-# Python-Abhängigkeiten
+# Python-Abhängigkeiten in venv (kein --break-system-packages nötig)
 COPY app/requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
+
+ENV PATH="/opt/venv/bin:$PATH"
 
 # App-Dateien
 COPY app/ /app/
