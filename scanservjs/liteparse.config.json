@@ -1,0 +1,13 @@
+{
+  "ocrLanguage": [
+    "deu",
+    "eng"
+  ],
+  "ocrEnabled": true,
+  "numWorkers": 2,
+  "maxPages": 200,
+  "dpi": 200,
+  "outputFormat": "json",
+  "preciseBoundingBox": true,
+  "preserveVerySmallText": false
+}

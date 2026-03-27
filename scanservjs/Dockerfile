@@ -23,10 +23,20 @@ RUN curl -fsSL -o /tmp/bashio.tar.gz "https://github.com/hassio-addons/bashio/ar
     && ln -sf /usr/lib/bashio/bashio /usr/bin/bashio \
     && rm -rf /tmp/bashio /tmp/bashio.tar.gz
 
+RUN if command -v npm >/dev/null 2>&1; then \
+      npm install -g @llamaindex/liteparse; \
+    else \
+      echo "npm fehlt im Basisimage - LiteParse CLI kann nicht installiert werden." >&2; \
+      exit 1; \
+    fi
+
 COPY config.local.js /etc/scanservjs/config.local.js
 COPY brother-skey /opt/scanservjs-brother-skey
+COPY scripts /opt/scanservjs-liteparse/scripts
+COPY liteparse.config.json /opt/scanservjs-liteparse/liteparse.config.json
 COPY run.sh /usr/local/bin/run.sh
-RUN chmod +x /usr/local/bin/run.sh /opt/scanservjs-brother-skey/*.sh
+RUN chmod +x /usr/local/bin/run.sh /opt/scanservjs-brother-skey/*.sh /opt/scanservjs-liteparse/scripts/*.sh /opt/scanservjs-liteparse/scripts/*.js \
+    && ln -sf /opt/scanservjs-liteparse/scripts/liteparse-test.sh /usr/local/bin/liteparse-test
 
 EXPOSE 8080
 
