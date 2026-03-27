@@ -228,6 +228,15 @@ class MultiWatcher:
             threads.append(t)
         return threads
 
+    def reindex(self) -> list:
+        """Triggert index_existing() erneut auf allen Watchern (Background)."""
+        threads = []
+        for w in self._watchers:
+            t = threading.Thread(target=w.index_existing, daemon=True)
+            t.start()
+            threads.append(t)
+        return threads
+
     def stop_all(self):
         for w in self._watchers:
             w.stop()

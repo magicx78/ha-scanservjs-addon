@@ -469,13 +469,48 @@ def tab_status():
 
     st.divider()
 
-    # ChromaDB Stats
+    # Indexierung
+    st.subheader("Indexierung")
+    col1, col2 = st.columns([2, 3])
+    with col1:
+        if st.button("🔄 Neu indexieren", type="primary", use_container_width=True):
+            _multi_watcher.reindex()
+            st.success("Gestartet — neue Dokumente erscheinen in wenigen Minuten.")
+    with col2:
+        st.caption("Nützlich nach Ollama-URL-Änderung oder wenn Dokumente fehlen.")
+
+    st.divider()
+
+    # ChromaDB Stats + Reset
     st.subheader("Datenbank (ChromaDB)")
     stats = db.get_stats()
     col1, col2, col3 = st.columns(3)
     col1.metric("Dokumente", stats["total_documents"])
     col2.metric("Chunks", stats["total_chunks"])
     col3.metric("Speicher", f"{stats['db_size_mb']} MB")
+
+    st.write("")
+    if "confirm_reset" not in st.session_state:
+        st.session_state.confirm_reset = False
+
+    if not st.session_state.confirm_reset:
+        if st.button("🗑️ Datenbank leeren", type="secondary"):
+            st.session_state.confirm_reset = True
+            st.rerun()
+    else:
+        st.warning(f"⚠️ Alle {stats['total_documents']} Dokumente werden unwiderruflich gelöscht!")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("✅ Ja, alles löschen", type="primary", use_container_width=True):
+                deleted = db.reset()
+                st.cache_resource.clear()
+                st.session_state.confirm_reset = False
+                st.success(f"Datenbank geleert — {deleted} Chunks gelöscht.")
+                st.rerun()
+        with col2:
+            if st.button("Abbrechen", use_container_width=True):
+                st.session_state.confirm_reset = False
+                st.rerun()
 
     st.divider()
 

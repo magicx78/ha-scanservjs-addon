@@ -157,6 +157,16 @@ class VectorDB:
     # Statistiken
     # ------------------------------------------------------------------
 
+    def reset(self) -> int:
+        """Löscht alle Dokumente. Gibt Anzahl gelöschter Chunks zurück."""
+        count = self._collection.count()
+        self._client.delete_collection("documents")
+        self._collection = self._client.get_or_create_collection(
+            name="documents",
+            metadata={"hnsw:space": "cosine"},
+        )
+        return count
+
     def get_stats(self) -> dict:
         """Gibt Statistiken zur Datenbank zurück."""
         total_chunks = self._collection.count()
