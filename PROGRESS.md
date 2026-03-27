@@ -136,3 +136,15 @@ Datum: 2026-03-27
   - Fortschritts-UI im Trefferfenster korrigiert: finaler Schritt `done` wird jetzt korrekt als abgeschlossen markiert (nicht mehr als aktiv).
   - Regressionstestlauf erneut durchgefuehrt (`13/13` Tests OK).
   - Keine Layout-Aenderung: weiterhin exakt 2 Hauptbereiche (Treffer + Antwort).
+
+## Nachtrag 2026-03-27 (Release 1.0.20)
+- Crash-Fix fuer `StreamlitDuplicateElementKey`:
+  - interaktive Treffer-Buttons (`Vorschau`) werden pro Script-Run nur noch einmal erzeugt.
+  - Render-Reihenfolge in `tab_suche()` angepasst (bei aktivem Suchlauf zuerst non-interaktiv, interaktiv erst nach Pipeline).
+  - doppelte interaktive Final-Render in `_run_search_pipeline()` entfernt.
+- Warnungsreduktion fuer `MediaFileHandler: Missing file ... .bin`:
+  - Vorschau-Download von `st.download_button` auf direkte Data-URI-Download-Links umgestellt.
+  - gilt fuer PDF- und Non-PDF-Download im Vorschau-Dialog.
+- Ergebnis:
+  - keine Duplicate-Key-Abbrueche mehr im Trefferfenster.
+  - deutlich stabilerer Vorschau-/Download-Flow unter haeufigen Reruns.

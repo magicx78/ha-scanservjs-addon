@@ -594,9 +594,10 @@ def _load_binary_file(path: str) -> bytes:
     return Path(path).read_bytes()
 
 
-def _render_preview_actions(pdf_data_uri: str, file_bytes: bytes, filename: str):
+def _render_preview_actions(pdf_data_uri: str, filename: str):
     st.markdown("<div class='preview-actions'></div>", unsafe_allow_html=True)
     action_left, action_mid, action_right = st.columns([1, 1, 1])
+    safe_filename = html.escape(filename, quote=True)
     with action_left:
         components.html(
             f"""
@@ -619,13 +620,29 @@ def _render_preview_actions(pdf_data_uri: str, file_bytes: bytes, filename: str)
             height=44,
         )
     with action_mid:
-        st.download_button(
-            "Speichern / Download",
-            data=file_bytes,
-            file_name=filename,
-            mime="application/pdf",
-            use_container_width=True,
-            key=f"preview_download_{hashlib.md5(filename.encode('utf-8')).hexdigest()[:8]}",
+        components.html(
+            f"""
+            <div style="height:40px;display:flex;align-items:center;">
+              <a
+                download="{safe_filename}"
+                href="{pdf_data_uri}"
+                style="
+                  width:100%;
+                  height:36px;
+                  border-radius:10px;
+                  border:1px solid #2a3a52;
+                  background:#1a2638;
+                  color:#e8effa;
+                  font-weight:600;
+                  text-decoration:none;
+                  display:flex;
+                  align-items:center;
+                  justify-content:center;">
+                Speichern / Download
+              </a>
+            </div>
+            """,
+            height=44,
         )
     with action_right:
         if st.button("Schliessen", use_container_width=True, key="preview_close_btn"):
@@ -679,13 +696,32 @@ def _render_preview_dialog():
     if suffix != ".pdf":
         st.warning(f"Datei ist kein PDF ({file_path.name}). Download ist weiterhin moeglich.")
         file_bytes = _load_binary_file(str(file_path))
-        st.download_button(
-            "Speichern / Download",
-            data=file_bytes,
-            file_name=file_path.name,
-            mime="application/octet-stream",
-            use_container_width=True,
-            key=f"preview_download_nonpdf_{hashlib.md5(str(file_path).encode('utf-8')).hexdigest()[:8]}",
+        non_pdf_b64 = base64.b64encode(file_bytes).decode("ascii")
+        non_pdf_uri = f"data:application/octet-stream;base64,{non_pdf_b64}"
+        safe_filename = html.escape(file_path.name, quote=True)
+        components.html(
+            f"""
+            <div style="height:44px;display:flex;align-items:center;">
+              <a
+                download="{safe_filename}"
+                href="{non_pdf_uri}"
+                style="
+                  width:100%;
+                  height:36px;
+                  border-radius:10px;
+                  border:1px solid #2a3a52;
+                  background:#1a2638;
+                  color:#e8effa;
+                  font-weight:600;
+                  text-decoration:none;
+                  display:flex;
+                  align-items:center;
+                  justify-content:center;">
+                Speichern / Download
+              </a>
+            </div>
+            """,
+            height=48,
         )
         if st.button("Schliessen", use_container_width=True, key="preview_close_nonpdf"):
             _close_preview()
@@ -697,7 +733,7 @@ def _render_preview_dialog():
     pdf_data_uri = f"data:application/pdf;base64,{b64}"
     iframe_src = f"{pdf_data_uri}#page={max(1, page)}&view=FitH&toolbar=1&navpanes=0"
 
-    _render_preview_actions(pdf_data_uri=pdf_data_uri, file_bytes=file_bytes, filename=file_path.name)
+    _render_preview_actions(pdf_data_uri=pdf_data_uri, filename=file_path.name)
     st.markdown(f"<iframe class='preview-frame' src='{iframe_src}'></iframe>", unsafe_allow_html=True)
 
     snippet = (hit.get("text", "") or "").strip()
@@ -1280,8 +1316,6 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
         state["telemetry"] = telemetry
         st.session_state.search_state = state
         _set_phase("done", state["status_text"])
-        _render_results_panel(results_slot)
-        _render_answer_panel(answer_slot)
         _finalize_telemetry()
         return
 
@@ -1434,8 +1468,6 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
         state = st.session_state.search_state
         state["is_streaming"] = False
         st.session_state.search_state = state
-        _render_results_panel(results_slot)
-        _render_answer_panel(answer_slot)
         _finalize_telemetry()
 
 
@@ -1483,16 +1515,19 @@ def tab_suche():
 
     results_slot = st.empty()
     answer_slot = st.empty()
-    _render_results_panel(results_slot)
-    _render_answer_panel(answer_slot)
-    _maybe_open_preview_dialog()
-
-    if st.session_state.pop("_do_search", False):
+    run_now = st.session_state.pop("_do_search", False)
+    if run_now:
+        _render_results_panel(results_slot, interactive=False)
+        _render_answer_panel(answer_slot)
         _run_search_pipeline(
             st.session_state.search_state["query"],
             results_slot=results_slot,
             answer_slot=answer_slot,
         )
+        _render_results_panel(results_slot)
+        _render_answer_panel(answer_slot)
+        _maybe_open_preview_dialog()
+    else:
         _render_results_panel(results_slot)
         _render_answer_panel(answer_slot)
         _maybe_open_preview_dialog()
