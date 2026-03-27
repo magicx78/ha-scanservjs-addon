@@ -7,6 +7,7 @@ import html
 import logging
 import os
 import queue
+import base64
 import sys
 import tempfile
 import threading
@@ -14,6 +15,7 @@ import time
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -88,35 +90,122 @@ STATUS_DESCRIPTIONS = {
 DESIGN_CSS = """
 <style>
 :root {
-  --bg: #f5f8fb;
-  --surface: #ffffff;
-  --surface-strong: #f0f5ff;
-  --text: #10233d;
-  --muted: #5a6e89;
-  --line: #d8e2f0;
-  --accent: #1366d6;
-  --ok: #0f8b53;
-  --warn: #b6650a;
-  --err: #c93d2f;
+  color-scheme: dark;
+  --bg: #070d16;
+  --surface: #111a28;
+  --surface-strong: #1a2638;
+  --text: #e8effa;
+  --muted: #a8b7cb;
+  --line: #2a3a52;
+  --accent: #63a5ff;
+  --ok: #52d08f;
+  --warn: #f6ba63;
+  --err: #ff8a7e;
   --radius: 14px;
   --radius-sm: 10px;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0c1420;
-    --surface: #121d2b;
-    --surface-strong: #18283b;
-    --text: #e7eef7;
-    --muted: #9db0c9;
-    --line: #2b3b50;
-    --accent: #62a3ff;
-    --ok: #47ca88;
-    --warn: #f2b458;
-    --err: #ff8174;
-  }
-}
 .stApp {
   background: radial-gradient(circle at 5% 0%, rgba(19,102,214,0.06), transparent 28%), var(--bg);
+  color: var(--text);
+}
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"],
+[data-testid="stSidebar"],
+[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"] {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+[data-testid="stDialog"] > div,
+[data-testid="stDialog"] [role="dialog"] {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--line) !important;
+}
+[data-testid="stTabs"] [role="tab"] {
+  background: var(--surface) !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 10px 10px 0 0 !important;
+}
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface)) !important;
+  color: var(--text) !important;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line)) !important;
+}
+[data-testid="stExpander"] details {
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius-sm) !important;
+}
+[data-testid="stExpander"] summary {
+  color: var(--text) !important;
+}
+[data-baseweb="input"] > div,
+[data-baseweb="textarea"] > div,
+[data-baseweb="select"] > div {
+  background: var(--surface) !important;
+  border-color: var(--line) !important;
+}
+[data-baseweb="input"] input,
+[data-baseweb="textarea"] textarea,
+[data-baseweb="select"] input,
+[data-baseweb="select"] [role="combobox"] {
+  color: var(--text) !important;
+}
+[data-baseweb="popover"],
+[role="listbox"] {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--line) !important;
+}
+[role="option"] {
+  color: var(--text) !important;
+}
+[role="option"][aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface)) !important;
+}
+.stButton > button,
+.stDownloadButton > button {
+  background: var(--surface-strong) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 10px !important;
+}
+.stButton > button:hover,
+.stDownloadButton > button:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line)) !important;
+  color: #f7fbff !important;
+}
+.stButton > button[data-testid="baseButton-primary"] {
+  background: linear-gradient(120deg, #2a6fd6, #4f90eb) !important;
+  color: #f7fbff !important;
+  border-color: #4f90eb !important;
+}
+[data-testid="stAlert"] {
+  background: color-mix(in srgb, var(--surface) 92%, var(--accent)) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--line) !important;
+}
+[data-testid="stMetric"] {
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius-sm) !important;
+  padding: .5rem .65rem !important;
+}
+[data-testid="stCaptionContainer"],
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] span,
+label,
+p,
+h1,
+h2,
+h3,
+h4 {
+  color: var(--text) !important;
 }
 .glass-card {
   background: linear-gradient(180deg, var(--surface), var(--surface-strong));
@@ -302,6 +391,46 @@ DESIGN_CSS = """
   font-size: .8rem;
   margin-bottom: .4rem;
 }
+.preview-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: .5rem;
+  margin-bottom: .7rem;
+}
+.preview-meta-item {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 90%, var(--accent));
+  border-radius: 9px;
+  padding: .45rem .55rem;
+  min-height: 3.1rem;
+}
+.preview-meta-label {
+  color: var(--muted);
+  font-size: .74rem;
+  line-height: 1.2;
+}
+.preview-meta-value {
+  color: var(--text);
+  font-size: .82rem;
+  font-weight: 580;
+  margin-top: .2rem;
+  word-break: break-word;
+}
+.preview-frame {
+  width: 100%;
+  min-height: 56vh;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0b121c;
+}
+.preview-actions {
+  margin: .45rem 0 .7rem;
+}
+@media (max-width: 900px) {
+  .preview-frame {
+    min-height: 66vh;
+  }
+}
 </style>
 """
 
@@ -415,6 +544,172 @@ def source_label(label: str) -> str:
     return SOURCE_ICONS.get(label, f"Quelle: {label}")
 
 
+def _hit_widget_key(prefix: str, index: int, hit: dict) -> str:
+    raw = (
+        f"{prefix}|{index}|{hit.get('filename','')}|{hit.get('page',1)}|"
+        f"{hit.get('chunk_index',0)}|{hit.get('source','')}"
+    )
+    digest = hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
+    return f"{prefix}_{digest}"
+
+
+def _resolve_hit_file(hit: dict) -> Path | None:
+    candidates: list[Path] = []
+    source_path = (hit.get("source") or "").strip()
+    filename = (hit.get("filename") or "").strip()
+    if source_path:
+        candidates.append(Path(source_path))
+    if filename:
+        candidates.append(Path(UPLOAD_FOLDER) / filename)
+
+    for candidate in candidates:
+        try:
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        except Exception:
+            continue
+    return None
+
+
+def _open_preview_for_hit(hit: dict):
+    st.session_state["preview_hit"] = {
+        "filename": hit.get("filename", ""),
+        "page": int(hit.get("page", 1) or 1),
+        "chunk_index": int(hit.get("chunk_index", 0) or 0),
+        "source": hit.get("source", ""),
+        "source_label": hit.get("source_label", ""),
+        "relevance_score": float(hit.get("relevance_score", 0.0) or 0.0),
+        "text": hit.get("text", "") or "",
+    }
+    st.session_state["preview_open"] = True
+
+
+def _close_preview():
+    st.session_state["preview_open"] = False
+    st.session_state["preview_hit"] = None
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_binary_file(path: str) -> bytes:
+    return Path(path).read_bytes()
+
+
+def _render_preview_actions(pdf_data_uri: str, file_bytes: bytes, filename: str):
+    st.markdown("<div class='preview-actions'></div>", unsafe_allow_html=True)
+    action_left, action_mid, action_right = st.columns([1, 1, 1])
+    with action_left:
+        components.html(
+            f"""
+            <div style="height:40px;display:flex;align-items:center;">
+              <button
+                style="
+                  width:100%;
+                  height:36px;
+                  border-radius:10px;
+                  border:1px solid #2a3a52;
+                  background:#1a2638;
+                  color:#e8effa;
+                  font-weight:600;
+                  cursor:pointer;"
+                onclick="const w = window.open('{pdf_data_uri}', '_blank'); if (w) {{ w.focus(); setTimeout(() => w.print(), 450); }}">
+                Drucken
+              </button>
+            </div>
+            """,
+            height=44,
+        )
+    with action_mid:
+        st.download_button(
+            "Speichern / Download",
+            data=file_bytes,
+            file_name=filename,
+            mime="application/pdf",
+            use_container_width=True,
+            key=f"preview_download_{hashlib.md5(filename.encode('utf-8')).hexdigest()[:8]}",
+        )
+    with action_right:
+        if st.button("Schliessen", use_container_width=True, key="preview_close_btn"):
+            _close_preview()
+            st.rerun()
+
+
+@st.dialog("Dokumentvorschau", width="large")
+def _render_preview_dialog():
+    hit = st.session_state.get("preview_hit") or {}
+    if not hit:
+        st.info("Kein Treffer ausgewaehlt.")
+        return
+
+    rel = max(0.0, min(1.0, float(hit.get("relevance_score", 0.0) or 0.0)))
+    page = int(hit.get("page", 1) or 1)
+    chunk_index = int(hit.get("chunk_index", 0) or 0)
+    src_label = source_label(hit.get("source_label", ""))
+
+    st.markdown(
+        "<div class='preview-meta-grid'>"
+        "<div class='preview-meta-item'>"
+        "<div class='preview-meta-label'>Dokumentname</div>"
+        f"<div class='preview-meta-value'>{html.escape(hit.get('filename', '-'))}</div>"
+        "</div>"
+        "<div class='preview-meta-item'>"
+        "<div class='preview-meta-label'>Seite / Chunk</div>"
+        f"<div class='preview-meta-value'>Seite {page} · Chunk {chunk_index}</div>"
+        "</div>"
+        "<div class='preview-meta-item'>"
+        "<div class='preview-meta-label'>Quelle</div>"
+        f"<div class='preview-meta-value'>{html.escape(src_label)}</div>"
+        "</div>"
+        "<div class='preview-meta-item'>"
+        "<div class='preview-meta-label'>Relevanz</div>"
+        f"<div class='preview-meta-value'>{rel:.0%}</div>"
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    file_path = _resolve_hit_file(hit)
+    if not file_path:
+        st.error("Datei fuer Vorschau nicht gefunden. Bitte Quelle/Upload pruefen.")
+        if st.button("Schliessen", use_container_width=True, key="preview_close_missing"):
+            _close_preview()
+            st.rerun()
+        return
+
+    suffix = file_path.suffix.lower()
+    if suffix != ".pdf":
+        st.warning(f"Datei ist kein PDF ({file_path.name}). Download ist weiterhin moeglich.")
+        file_bytes = _load_binary_file(str(file_path))
+        st.download_button(
+            "Speichern / Download",
+            data=file_bytes,
+            file_name=file_path.name,
+            mime="application/octet-stream",
+            use_container_width=True,
+            key=f"preview_download_nonpdf_{hashlib.md5(str(file_path).encode('utf-8')).hexdigest()[:8]}",
+        )
+        if st.button("Schliessen", use_container_width=True, key="preview_close_nonpdf"):
+            _close_preview()
+            st.rerun()
+        return
+
+    file_bytes = _load_binary_file(str(file_path))
+    b64 = base64.b64encode(file_bytes).decode("ascii")
+    pdf_data_uri = f"data:application/pdf;base64,{b64}"
+    iframe_src = f"{pdf_data_uri}#page={max(1, page)}&view=FitH&toolbar=1&navpanes=0"
+
+    _render_preview_actions(pdf_data_uri=pdf_data_uri, file_bytes=file_bytes, filename=file_path.name)
+    st.markdown(f"<iframe class='preview-frame' src='{iframe_src}'></iframe>", unsafe_allow_html=True)
+
+    snippet = (hit.get("text", "") or "").strip()
+    if snippet:
+        st.caption(f"Treffer-Auszug: {snippet[:420]}")
+
+
+def _maybe_open_preview_dialog():
+    if st.session_state.get("preview_open", False):
+        _render_preview_dialog()
+
+
 def _render_llm_selector(prefix: str = "search"):
     embedder = get_embedder()
     models = embedder.list_models()
@@ -483,6 +778,11 @@ def _index_file_bytes(filename: str, file_bytes: bytes) -> tuple[bool, str]:
 
 
 def _init_search_state():
+    if "preview_open" not in st.session_state:
+        st.session_state["preview_open"] = False
+    if "preview_hit" not in st.session_state:
+        st.session_state["preview_hit"] = None
+
     if "search_state" in st.session_state:
         return
     st.session_state.search_state = {
@@ -595,6 +895,7 @@ def _set_phase(phase: str, status_text: str = ""):
 
 
 def _new_search(query: str):
+    _close_preview()
     state = st.session_state.search_state
     state["request_id"] += 1
     state["query"] = query
@@ -764,21 +1065,23 @@ def _render_status_panel():
         )
 
 
-def _render_results_panel(slot=None):
+def _render_results_panel(slot=None, interactive: bool = True):
     target = slot if slot is not None else st
     state = st.session_state.search_state
     hits = state["hits"]
-    target.markdown("### Treffer")
+
+    panel = target.container()
+    panel.markdown("### Treffer")
     if state["phase"] in {"started", "finding_hits", "building_answer", "expanding_result"}:
-        target.markdown(
+        panel.markdown(
             "<div class='live-row'>"
-            "<span>Live-Suche läuft</span>"
+            "<span>Live-Suche laeuft</span>"
             "<span class='spark'></span><span class='spark'></span><span class='spark'></span>"
             "</div>",
             unsafe_allow_html=True,
         )
     if state["phase"] in {"started", "finding_hits"} and not hits:
-        target.markdown(
+        panel.markdown(
             "<div class='glass-card'>"
             "<div class='skeleton line'></div>"
             "<div class='skeleton line short'></div>"
@@ -789,31 +1092,57 @@ def _render_results_panel(slot=None):
         return
 
     if not hits:
-        target.info("Noch keine Treffer sichtbar.")
+        panel.info("Noch keine Treffer sichtbar.")
         return
 
-    rows = []
-    for i, chunk in enumerate(hits, start=1):
-        rel = chunk.get("relevance_score", 0)
-        src = source_label(chunk.get("source_label", ""))
-        title = f"{i}. {chunk.get('filename', '?')} (Seite {chunk.get('page', '?')})"
-        snippet = (chunk.get("text", "") or "").replace("\n", " ").strip()[:220]
-        title_esc = html.escape(title)
-        src_esc = html.escape(src)
-        snippet_esc = html.escape(snippet)
-        rows.append(
-            "<div class='hit-item'>"
-            f"<div class='result-title'>{title_esc}</div>"
-            f"<div class='result-sub'>{src_esc} · Relevanz {rel:.0%}</div>"
-            f"<div class='result-snippet'>{snippet_esc}</div>"
-            "</div>"
+    if not interactive:
+        rows = []
+        for i, chunk in enumerate(hits, start=1):
+            rel = chunk.get("relevance_score", 0)
+            src = source_label(chunk.get("source_label", ""))
+            title = f"{i}. {chunk.get('filename', '?')} (Seite {chunk.get('page', '?')})"
+            snippet = (chunk.get("text", "") or "").replace("\n", " ").strip()[:220]
+            title_esc = html.escape(title)
+            src_esc = html.escape(src)
+            snippet_esc = html.escape(snippet)
+            rows.append(
+                "<div class='hit-item'>"
+                f"<div class='result-title'>{title_esc}</div>"
+                f"<div class='result-sub'>{src_esc} · Relevanz {rel:.0%}</div>"
+                f"<div class='result-snippet'>{snippet_esc}</div>"
+                "</div>"
+            )
+        panel.markdown(
+            "<div class='results-box'>"
+            f"{''.join(rows)}"
+            "</div>",
+            unsafe_allow_html=True,
         )
-    target.markdown(
-        "<div class='results-box'>"
-        f"{''.join(rows)}"
-        "</div>",
-        unsafe_allow_html=True,
-    )
+        return
+
+    with panel:
+        for i, chunk in enumerate(hits, start=1):
+            rel = chunk.get("relevance_score", 0.0)
+            src = source_label(chunk.get("source_label", ""))
+            snippet = (chunk.get("text", "") or "").replace("\n", " ").strip()[:220]
+            page = int(chunk.get("page", 1) or 1)
+            cidx = int(chunk.get("chunk_index", 0) or 0)
+            key = _hit_widget_key("hit_preview", i, chunk)
+
+            left, right = st.columns([7, 1.3], gap="small")
+            with left:
+                st.markdown(
+                    "<div class='result-card'>"
+                    f"<div class='result-title'>{html.escape(chunk.get('filename', '?'))}</div>"
+                    f"<div class='result-sub'>Seite {page} · Chunk {cidx} · {html.escape(src)} · Relevanz {rel:.0%}</div>"
+                    f"<div class='result-snippet'>{html.escape(snippet)}</div>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+            with right:
+                if st.button("Vorschau", key=key, use_container_width=True):
+                    _open_preview_for_hit(chunk)
+                    st.rerun()
 
 
 def _render_answer_panel(slot=None):
@@ -889,7 +1218,7 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
         return
 
     _set_phase("started", STATUS_DESCRIPTIONS["started"])
-    _render_results_panel(results_slot)
+    _render_results_panel(results_slot, interactive=False)
     _render_answer_panel(answer_slot)
 
     try:
@@ -922,7 +1251,7 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
                 )
             st.session_state.search_state = state
             _set_phase("finding_hits", state["status_text"])
-            _render_results_panel(results_slot)
+            _render_results_panel(results_slot, interactive=False)
             _render_answer_panel(answer_slot)
 
             if payload["results"]:
@@ -942,7 +1271,7 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
             state["hits"] = all_hits
             state["status_text"] = f"{len(all_hits)} Treffer nach Relevanz."
             st.session_state.search_state = state
-            _render_results_panel(results_slot)
+            _render_results_panel(results_slot, interactive=False)
             _render_answer_panel(answer_slot)
             first_context = all_hits
 
@@ -973,7 +1302,7 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
                 state = st.session_state.search_state
                 state["answer"] = answer_text
                 st.session_state.search_state = state
-                _render_results_panel(results_slot)
+                _render_results_panel(results_slot, interactive=False)
                 _render_answer_panel(answer_slot)
             elif event["type"] == "meta":
                 state = st.session_state.search_state
@@ -1060,6 +1389,7 @@ def tab_suche():
     answer_slot = st.empty()
     _render_results_panel(results_slot)
     _render_answer_panel(answer_slot)
+    _maybe_open_preview_dialog()
 
     if st.session_state.pop("_do_search", False):
         _run_search_pipeline(
@@ -1069,6 +1399,7 @@ def tab_suche():
         )
         _render_results_panel(results_slot)
         _render_answer_panel(answer_slot)
+        _maybe_open_preview_dialog()
 
 
 def tab_hochladen():

@@ -98,3 +98,15 @@ Datum: 2026-03-27
   - Live-Suchindikator im Trefferfenster.
 - Stabilisierung:
   - nur ein fixes Trefferfenster und ein fixes Antwortfenster (keine Mehrfach-Panel-Vervielfachung).
+
+## Nachtrag 2026-03-27 (Release 1.0.17)
+- Treffer-Vorschau eingebaut:
+  - Trefferkarten sind jetzt anklickbar (`Vorschau`-Button je Treffer).
+  - Oeffnet einen Dialog mit eingebettetem PDF-Viewer.
+  - Aktionen im Dialog: `Drucken`, `Speichern / Download`, `Schliessen`.
+  - Metadaten sichtbar: Dokumentname, Seite/Chunk, Quelle, Relevanz.
+  - Fallback fuer nicht-PDF-Dateien mit Download bleibt erhalten.
+- Dark-Mode-Haertung:
+  - komplette Ueberschreibung kritischer Streamlit-Defaults fuer dunkle Flaechen.
+  - konsistente Farben fuer Hintergrund, Container, Trefferkarten, Tabs, Expander, Buttons, Inputs, Dropdowns und Info-/Statusboxen.
+  - Lesbarkeit und Kontraste in allen Kernbereichen verbessert.

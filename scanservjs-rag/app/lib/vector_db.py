@@ -123,6 +123,7 @@ class VectorDB:
                 "text": doc,
                 "filename": meta.get("filename", ""),
                 "page": meta.get("page", 1),
+                "chunk_index": meta.get("chunk_index", 0),
                 "source": meta.get("source", ""),
                 "source_label": meta.get("source_label", "unknown"),
                 "distance": dist,
