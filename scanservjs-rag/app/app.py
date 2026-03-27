@@ -67,10 +67,10 @@ def get_embedder() -> OllamaEmbedder:
 
 
 @st.cache_resource
-def get_rag() -> RAGEngine:
+def get_rag(llm_model: str = OLLAMA_LLM_MODEL) -> RAGEngine:
     return RAGEngine(
         ollama_url=OLLAMA_URL,
-        llm_model=OLLAMA_LLM_MODEL,
+        llm_model=llm_model,
         use_claude=USE_CLAUDE,
         anthropic_api_key=ANTHROPIC_API_KEY,
     )
@@ -302,8 +302,9 @@ def tab_suche():
 
     if do_search and question.strip():
         embedder   = get_embedder()
-        rag        = get_rag()
-        model_name = "Claude API" if USE_CLAUDE else OLLAMA_LLM_MODEL
+        active_llm = st.session_state.get("llm_model", OLLAMA_LLM_MODEL)
+        rag        = get_rag(active_llm)
+        model_name = "Claude API" if USE_CLAUDE else active_llm
         anim       = st.empty()
 
         # Schritt 1 — Pac-Man frisst Vektoren
@@ -453,10 +454,20 @@ def tab_status():
 
     models = embedder.list_models()
     if models:
-        with st.expander(f"Verfügbare Modelle ({len(models)})"):
-            for m in models:
-                icon = "✓" if m in (OLLAMA_EMBED_MODEL, OLLAMA_LLM_MODEL) else " "
-                st.text(f"{icon} {m}")
+        current_llm = st.session_state.get("llm_model", OLLAMA_LLM_MODEL)
+        idx = models.index(current_llm) if current_llm in models else 0
+
+        selected_llm = st.selectbox(
+            "LLM-Modell (für Antworten)",
+            options=models,
+            index=idx,
+            help="Wird sofort aktiv — kein Neustart nötig.",
+        )
+        if selected_llm != st.session_state.get("llm_model"):
+            st.session_state["llm_model"] = selected_llm
+            st.caption(f"✓ Wechsle auf {selected_llm}")
+
+        st.caption(f"Embedding-Modell: **{OLLAMA_EMBED_MODEL}** (in HA-Config änderbar — erfordert DB-Reset)")
 
     st.divider()
 
