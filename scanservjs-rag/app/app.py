@@ -1,20 +1,18 @@
-"""
-scanservjs-rag — Lokale Dokumentensuche mit RAG
-Streamlit Web-UI mit 4 Tabs: Suche, Hochladen, Dokumente, Status
+﻿"""
+scanservjs-rag - local document search with progressive RAG UX.
 """
 
 import hashlib
+import html
+import logging
 import os
 import sys
-import threading
 import tempfile
 import time
 from pathlib import Path
 
 import streamlit as st
-import streamlit.components.v1 as components
 
-# Lib-Pfad hinzufügen
 sys.path.insert(0, str(Path(__file__).parent))
 
 from lib.chunker import DocumentChunker, SUPPORTED_EXTENSIONS
@@ -22,43 +20,239 @@ from lib.embedder import OllamaEmbedder
 from lib.rag import RAGEngine
 from lib.vector_db import VectorDB
 from lib.watcher import FolderWatcher, MultiWatcher
+from lib.state_machine import normalize_transition
 
-# ---------------------------------------------------------------------------
-# Konfiguration aus Umgebungsvariablen (gesetzt von run.sh)
-# ---------------------------------------------------------------------------
+logger = logging.getLogger("scanservjs-rag")
 
-OLLAMA_URL          = os.environ.get("OLLAMA_URL", "http://homeassistant.local:11434")
-OLLAMA_EMBED_MODEL  = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
-OLLAMA_LLM_MODEL    = os.environ.get("OLLAMA_LLM_MODEL", "qwen2.5:14b")
-ANTHROPIC_API_KEY   = os.environ.get("ANTHROPIC_API_KEY", "")
-USE_CLAUDE          = os.environ.get("USE_CLAUDE", "false").lower() == "true"
-MAX_RESULTS         = int(os.environ.get("MAX_RESULTS", "5"))
-OCR_LANG            = os.environ.get("OCR_LANG", "deu+eng")
-CHROMADB_PATH       = os.environ.get("CHROMADB_PATH", "/data/chromadb")
-UPLOAD_FOLDER       = os.environ.get("UPLOAD_FOLDER", "/data/uploads")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://homeassistant.local:11434")
+OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+OLLAMA_LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "qwen2.5:14b")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+USE_CLAUDE = os.environ.get("USE_CLAUDE", "false").lower() == "true"
+MAX_RESULTS = int(os.environ.get("MAX_RESULTS", "5"))
+OCR_LANG = os.environ.get("OCR_LANG", "deu+eng")
+CHROMADB_PATH = os.environ.get("CHROMADB_PATH", "/data/chromadb")
+UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/data/uploads")
+PAPERLESS_ARCHIVE = os.environ.get(
+    "PAPERLESS_ARCHIVE", "/share/paperless/media/documents/archive"
+)
+INBOX_FOLDER = os.environ.get("INBOX_FOLDER", "/share/rag-inbox")
+SEARCH_CACHE_TTL_SECONDS = int(os.environ.get("SEARCH_CACHE_TTL_SECONDS", "180"))
 
-# Zwei Watch-Ordner
-PAPERLESS_ARCHIVE   = os.environ.get("PAPERLESS_ARCHIVE", "/share/paperless/media/documents/archive")
-INBOX_FOLDER        = os.environ.get("INBOX_FOLDER", "/share/rag-inbox")
+SEARCH_PHASE_ORDER = [
+    "started",
+    "finding_hits",
+    "building_answer",
+    "expanding_result",
+    "completed",
+]
+TERMINAL_PHASES = {"completed", "empty", "error", "cancelled"}
 
-# ---------------------------------------------------------------------------
-# Seitenconfig
-# ---------------------------------------------------------------------------
+SOURCE_ICONS = {
+    "paperless": "Paperless",
+    "inbox": "Inbox",
+    "upload": "Upload",
+}
+
+PHASE_LABELS = {
+    "started": "Suche gestartet",
+    "finding_hits": "Treffer werden gefunden",
+    "building_answer": "Verarbeitung / Antwortaufbau laeuft",
+    "expanding_result": "Ergebnis wird erweitert",
+    "completed": "Abgeschlossen",
+    "empty": "Leerzustand",
+    "error": "Fehler",
+    "cancelled": "Abgebrochen",
+}
+
+STATUS_DESCRIPTIONS = {
+    "started": "Anfrage initialisiert und Suchlauf vorbereitet.",
+    "finding_hits": "Erste relevante Quellen werden semantisch ermittelt.",
+    "building_answer": "Antwort wird live aus den ersten Treffern aufgebaut.",
+    "expanding_result": "Antwort wird mit weiteren Treffern erweitert.",
+    "completed": "Suchlauf ist abgeschlossen.",
+    "empty": "Es wurden keine relevanten Treffer gefunden.",
+    "error": "Die Verarbeitung wurde mit Fehler beendet.",
+    "cancelled": "Anfrage wurde manuell abgebrochen.",
+}
+
+DESIGN_CSS = """
+<style>
+:root {
+  --bg: #f5f8fb;
+  --surface: #ffffff;
+  --surface-strong: #f0f5ff;
+  --text: #10233d;
+  --muted: #5a6e89;
+  --line: #d8e2f0;
+  --accent: #1366d6;
+  --ok: #0f8b53;
+  --warn: #b6650a;
+  --err: #c93d2f;
+  --radius: 14px;
+  --radius-sm: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c1420;
+    --surface: #121d2b;
+    --surface-strong: #18283b;
+    --text: #e7eef7;
+    --muted: #9db0c9;
+    --line: #2b3b50;
+    --accent: #62a3ff;
+    --ok: #47ca88;
+    --warn: #f2b458;
+    --err: #ff8174;
+  }
+}
+.stApp {
+  background: radial-gradient(circle at 5% 0%, rgba(19,102,214,0.06), transparent 28%), var(--bg);
+}
+.glass-card {
+  background: linear-gradient(180deg, var(--surface), var(--surface-strong));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+}
+.status-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: .45rem;
+}
+.status-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: .35rem .65rem;
+  font-size: .78rem;
+  color: var(--muted);
+  background: var(--surface);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.status-chip.done {
+  border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
+  color: var(--ok);
+}
+.status-chip.active {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--line));
+  color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+  animation: pulse-chip 1.25s ease-in-out infinite;
+}
+.status-chip.problem {
+  border-color: color-mix(in srgb, var(--err) 50%, var(--line));
+  color: var(--err);
+}
+.meta-line {
+  color: var(--muted);
+  font-size: .86rem;
+  margin-top: .3rem;
+}
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: .65rem;
+}
+.result-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: .72rem .82rem;
+  background: var(--surface);
+  transform: translateY(0);
+  opacity: 1;
+  transition: transform .22s ease, opacity .22s ease;
+}
+.result-title {
+  font-weight: 650;
+  color: var(--text);
+  font-size: .9rem;
+}
+.result-sub {
+  color: var(--muted);
+  font-size: .78rem;
+  margin-top: .22rem;
+}
+.result-snippet {
+  color: var(--text);
+  font-size: .82rem;
+  margin-top: .45rem;
+  line-height: 1.34;
+  max-height: 5.2rem;
+  overflow: hidden;
+}
+.answer-box {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: .92rem;
+  min-height: 6rem;
+  max-height: 55vh;
+  overflow: auto;
+  line-height: 1.45;
+  word-break: break-word;
+}
+.answer-streaming::after {
+  content: "";
+  display: inline-block;
+  width: .55rem;
+  height: 1rem;
+  margin-left: .28rem;
+  background: var(--accent);
+  animation: blink .9s steps(1, end) infinite;
+}
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(140,159,184,0.14) 20%, rgba(140,159,184,0.28) 50%, rgba(140,159,184,0.14) 80%);
+  background-size: 280% 100%;
+  animation: shimmer 1.25s linear infinite;
+}
+.skeleton.line { height: .8rem; margin-bottom: .45rem; }
+.skeleton.line.short { width: 55%; }
+.callout {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 84%, var(--accent));
+  border-radius: var(--radius-sm);
+  padding: .66rem .78rem;
+  font-size: .85rem;
+  color: var(--text);
+}
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes pulse-chip { 50% { transform: translateY(-1px); } }
+</style>
+"""
 
 st.set_page_config(
     page_title="Dokumentensuche",
-    page_icon="🔍",
+    page_icon="ðŸ”Ž",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+st.markdown(DESIGN_CSS, unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------------
-# Globale Objekte (gecacht über Session-State)
-# ---------------------------------------------------------------------------
 
 @st.cache_resource
 def get_db() -> VectorDB:
     return VectorDB(persist_path=CHROMADB_PATH)
+
+
+@st.cache_data(ttl=3)
+def get_db_stats_cached() -> dict:
+    return get_db().get_stats()
+
+
+@st.cache_data(ttl=5)
+def list_documents_cached() -> list[dict]:
+    return get_db().list_documents()
+
+
+def invalidate_ui_caches():
+    """Invalidate data caches after write operations."""
+    st.cache_data.clear()
+    if "search_state" in st.session_state:
+        st.session_state.search_state["search_cache"] = {}
 
 
 @st.cache_resource
@@ -80,60 +274,57 @@ def get_rag(llm_model: str = OLLAMA_LLM_MODEL) -> RAGEngine:
 def get_multi_watcher() -> MultiWatcher:
     db = get_db()
     embedder = get_embedder()
-
     watchers = []
 
-    # Watcher 1: Paperless archive (rekursiv — Unterordner nach Jahr/Monat)
     if PAPERLESS_ARCHIVE and PAPERLESS_ARCHIVE != "null":
-        watchers.append(FolderWatcher(
-            watch_folder=PAPERLESS_ARCHIVE,
-            db=db,
-            embedder=embedder,
-            ocr_lang=OCR_LANG,
-            source_label="paperless",
-            recursive=True,
-        ))
+        watchers.append(
+            FolderWatcher(
+                watch_folder=PAPERLESS_ARCHIVE,
+                db=db,
+                embedder=embedder,
+                ocr_lang=OCR_LANG,
+                source_label="paperless",
+                recursive=True,
+            )
+        )
 
-    # Watcher 2: Eigener Inbox-Ordner (flach)
     if INBOX_FOLDER and INBOX_FOLDER != "null":
         Path(INBOX_FOLDER).mkdir(parents=True, exist_ok=True)
-        watchers.append(FolderWatcher(
-            watch_folder=INBOX_FOLDER,
-            db=db,
-            embedder=embedder,
-            ocr_lang=OCR_LANG,
-            source_label="inbox",
-            recursive=False,
-        ))
+        watchers.append(
+            FolderWatcher(
+                watch_folder=INBOX_FOLDER,
+                db=db,
+                embedder=embedder,
+                ocr_lang=OCR_LANG,
+                source_label="inbox",
+                recursive=False,
+            )
+        )
 
-    mw = MultiWatcher(watchers)
-    mw.index_all_existing()   # Bestand indexieren (Background)
-    mw.start_all()            # Live-Watch starten
-    return mw
+    multi = MultiWatcher(watchers)
+    multi.index_all_existing()
+    multi.start_all()
+    return multi
 
 
-# Watcher beim Start initialisieren
 _multi_watcher = get_multi_watcher()
 
-
-# ---------------------------------------------------------------------------
-# Hilfsfunktionen
-# ---------------------------------------------------------------------------
 
 def md5_bytes(data: bytes) -> str:
     return hashlib.md5(data).hexdigest()
 
 
+def source_label(label: str) -> str:
+    return SOURCE_ICONS.get(label, f"Quelle: {label}")
+
+
 def _index_file_bytes(filename: str, file_bytes: bytes) -> tuple[bool, str]:
-    """Indexiert eine Datei aus Bytes. Gibt (erfolg, meldung) zurück."""
     db = get_db()
     embedder = get_embedder()
     chunker = DocumentChunker(ocr_lang=OCR_LANG)
-
-    # Duplikat-Check
     md5 = md5_bytes(file_bytes)
     if db.is_indexed(md5):
-        return False, f"'{filename}' ist bereits indexiert (Duplikat übersprungen)."
+        return False, f"'{filename}' ist bereits indexiert (Duplikat)."
 
     suffix = Path(filename).suffix
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -157,244 +348,588 @@ def _index_file_bytes(filename: str, file_bytes: bytes) -> tuple[bool, str]:
 
         embeddings = [embedder.embed(c["text"]) for c in chunks]
         added = db.add_document(filename, chunks, embeddings)
-
-        return True, f"'{filename}' indexiert — {added} Chunks."
+        return True, f"'{filename}' indexiert - {added} Chunks."
     finally:
         tmp_path.unlink(missing_ok=True)
 
 
-# Quelle → Icon + Label
-SOURCE_ICONS = {
-    "paperless": "📄 Paperless",
-    "inbox":     "📥 Inbox",
-    "upload":    "📤 Hochgeladen",
-}
-
-def source_label(label: str) -> str:
-    return SOURCE_ICONS.get(label, f"📁 {label}")
-
-
-
-
-# ---------------------------------------------------------------------------
-# Pac-Man Suchanimation
-# CSS wird einmalig in den DOM injiziert (eigener st.markdown-Block der
-# NICHT durch st.empty() ersetzt wird) → @keyframes bleiben erhalten
-# ---------------------------------------------------------------------------
-
-_PACMAN_CSS = """
-<style>
-@keyframes pm-chomp {
-    0%,100% { clip-path: polygon(50% 50%, 100% 12%, 100% 88%); }
-    50%      { clip-path: polygon(50% 50%, 100% 50%, 100% 50%); }
-}
-@keyframes pm-scroll {
-    from { transform: translateX(30px); }
-    to   { transform: translateX(-320px); }
-}
-@keyframes pm-pulse {
-    0%,100% { opacity: 1; } 50% { opacity: 0.35; }
-}
-.pm-box {
-    background: #0b1623; border: 1px solid #1e3a5f;
-    border-radius: 13px; padding: 18px 20px; margin: 6px 0;
-}
-.pm-num  { color: #60a5fa; font-size: 10px; font-weight: 800;
-           letter-spacing: .12em; text-transform: uppercase; margin-bottom: 5px; }
-.pm-desc { color: #e2e8f0; font-size: 15px; margin-bottom: 14px;
-           animation: pm-pulse 1.5s ease infinite; }
-.pm-row  { display: flex; align-items: center; height: 46px;
-           overflow: hidden; margin-bottom: 12px; }
-.pm-pac  {
-    width: 40px; height: 40px; background: #fbbf24; border-radius: 50%;
-    clip-path: polygon(50% 50%, 100% 12%, 100% 88%);
-    animation: pm-chomp 0.22s linear infinite;
-    flex-shrink: 0; position: relative; z-index: 2;
-    box-shadow: 0 0 12px #fbbf2488;
-}
-.pm-track {
-    display: flex; align-items: center; gap: 18px;
-    animation: pm-scroll 1.7s linear infinite;
-    padding-left: 10px; flex: 1;
-}
-.pm-dot { width: 9px; height: 9px; background: #60a5fa;
-          border-radius: 50%; box-shadow: 0 0 6px #60a5faaa; flex-shrink: 0; }
-.pm-doc { width: 8px; height: 10px; background: #93c5fd;
-          border-radius: 1px 3px 1px 1px;
-          box-shadow: 0 0 6px #93c5fdaa; flex-shrink: 0; }
-.pm-bar-bg   { height: 5px; background: #1e3a5f; border-radius: 3px; overflow: hidden; }
-.pm-bar-fill { height: 100%;
-               background: linear-gradient(90deg, #b45309, #f59e0b, #fbbf24);
-               border-radius: 3px; transition: width .45s ease; }
-.pm-done {
-    display: flex; align-items: center; gap: 12px;
-    background: #052e16; border: 1px solid #166534;
-    border-radius: 13px; padding: 14px 20px;
-    color: #86efac; font-weight: 700; font-size: 15px;
-}
-</style>
-"""
-
-_DOTS = "".join(['<div class="pm-doc"></div><div class="pm-dot"></div>'] * 12)
+def _init_search_state():
+    if "search_state" in st.session_state:
+        return
+    st.session_state.search_state = {
+        "request_id": 0,
+        "query": "",
+        "phase": "completed",
+        "error": "",
+        "status_text": "Bereit",
+        "hits": [],
+        "answer": "",
+        "is_streaming": False,
+        "cancel_requested": False,
+        "started_at": None,
+        "completed_at": None,
+        "search_cache": {},
+        "telemetry": {
+            "first_hit_at": None,
+            "first_token_at": None,
+            "total_duration_ms": None,
+            "cache_hit": False,
+        },
+    }
 
 
-def _pacman_step(step: int, total: int, desc: str, pct: int) -> str:
-    return f"""
-<div class="pm-box">
-  <div class="pm-num">Schritt {step} / {total}</div>
-  <div class="pm-desc">{desc}</div>
-  <div class="pm-row">
-    <div class="pm-pac"></div>
-    <div class="pm-track">{_DOTS}</div>
-  </div>
-  <div class="pm-bar-bg"><div class="pm-bar-fill" style="width:{pct}%"></div></div>
-</div>"""
+def _db_revision() -> int:
+    return get_db().get_stats().get("total_chunks", 0)
 
 
-def _pacman_done() -> str:
-    return """<div class="pm-done">
-  <span style="font-size:24px">😊</span>
-  Alle Daten verarbeitet — Antwort bereit!
-</div>"""
+def _search_cache_key(question: str, llm_model: str, revision: int) -> tuple:
+    return (question.strip().lower(), llm_model, int(MAX_RESULTS), int(revision))
 
 
-# ---------------------------------------------------------------------------
-# Tab 1: Suche
-# ---------------------------------------------------------------------------
+def _search_cache_get(question: str, llm_model: str, revision: int) -> dict | None:
+    state = st.session_state.search_state
+    cache = state.get("search_cache", {})
+    key = _search_cache_key(question, llm_model, revision)
+    item = cache.get(key)
+    if not item:
+        return None
+    age = time.time() - item.get("stored_at", 0.0)
+    if age > SEARCH_CACHE_TTL_SECONDS:
+        cache.pop(key, None)
+        state["search_cache"] = cache
+        st.session_state.search_state = state
+        return None
+    return item
 
-def _on_search_enter():
-    """Wird bei Enter im Suchfeld aufgerufen."""
-    q = st.session_state.get("search_q", "").strip()
-    if q:
-        st.session_state["_do_search"] = True
+
+def _search_cache_put(question: str, llm_model: str, revision: int, hits: list[dict], answer: str):
+    state = st.session_state.search_state
+    cache = state.get("search_cache", {})
+    key = _search_cache_key(question, llm_model, revision)
+    cache[key] = {
+        "hits": list(hits),
+        "answer": answer,
+        "stored_at": time.time(),
+    }
+
+    # bounded in-memory cache per session
+    if len(cache) > 20:
+        oldest = sorted(cache.items(), key=lambda item: item[1].get("stored_at", 0.0))[:5]
+        for old_key, _ in oldest:
+            cache.pop(old_key, None)
+
+    state["search_cache"] = cache
+    st.session_state.search_state = state
+
+
+def _set_phase(phase: str, status_text: str = ""):
+    state = st.session_state.search_state
+    state["phase"] = normalize_transition(state.get("phase", "completed"), phase)
+    if status_text:
+        state["status_text"] = status_text
+    if phase == "started":
+        state["started_at"] = time.time()
+    if phase in TERMINAL_PHASES:
+        state["completed_at"] = time.time()
+    st.session_state.search_state = state
+
+
+def _new_search(query: str):
+    state = st.session_state.search_state
+    state["request_id"] += 1
+    state["query"] = query
+    state["phase"] = "started"
+    state["error"] = ""
+    state["status_text"] = STATUS_DESCRIPTIONS["started"]
+    state["hits"] = []
+    state["answer"] = ""
+    state["is_streaming"] = False
+    state["cancel_requested"] = False
+    state["started_at"] = time.time()
+    state["completed_at"] = None
+    state["telemetry"] = {
+        "first_hit_at": None,
+        "first_token_at": None,
+        "total_duration_ms": None,
+        "cache_hit": False,
+    }
+    st.session_state.search_state = state
+
+
+def _request_cancel():
+    state = st.session_state.search_state
+    state["cancel_requested"] = True
+    state["is_streaming"] = False
+    state["status_text"] = STATUS_DESCRIPTIONS["cancelled"]
+    state["phase"] = "cancelled"
+    state["completed_at"] = time.time()
+    st.session_state.search_state = state
+
+
+def _mark_first_hit():
+    state = st.session_state.search_state
+    telemetry = state.get("telemetry", {})
+    if not telemetry.get("first_hit_at"):
+        telemetry["first_hit_at"] = time.time()
+        state["telemetry"] = telemetry
+        st.session_state.search_state = state
+
+
+def _mark_first_token():
+    state = st.session_state.search_state
+    telemetry = state.get("telemetry", {})
+    if not telemetry.get("first_token_at"):
+        telemetry["first_token_at"] = time.time()
+        state["telemetry"] = telemetry
+        st.session_state.search_state = state
+
+
+def _finalize_telemetry():
+    state = st.session_state.search_state
+    started_at = state.get("started_at")
+    now = time.time()
+    telemetry = state.get("telemetry", {})
+    if started_at:
+        telemetry["total_duration_ms"] = int((now - started_at) * 1000)
+    state["telemetry"] = telemetry
+    st.session_state.search_state = state
+
+    first_hit_ms = None
+    first_token_ms = None
+    if started_at and telemetry.get("first_hit_at"):
+        first_hit_ms = int((telemetry["first_hit_at"] - started_at) * 1000)
+    if started_at and telemetry.get("first_token_at"):
+        first_token_ms = int((telemetry["first_token_at"] - started_at) * 1000)
+    logger.info(
+        "search telemetry phase=%s first_hit_ms=%s first_token_ms=%s total_duration_ms=%s cache_hit=%s",
+        state.get("phase"),
+        first_hit_ms,
+        first_token_ms,
+        telemetry.get("total_duration_ms"),
+        telemetry.get("cache_hit", False),
+    )
+
+
+def _phase_chip_state(target_phase: str, current_phase: str) -> str:
+    if current_phase in {"error", "empty", "cancelled"}:
+        if target_phase == "completed":
+            return "status-chip problem"
+        if target_phase in SEARCH_PHASE_ORDER and SEARCH_PHASE_ORDER.index(target_phase) < 2:
+            return "status-chip done"
+        return "status-chip"
+    if current_phase not in SEARCH_PHASE_ORDER:
+        return "status-chip"
+
+    curr_idx = SEARCH_PHASE_ORDER.index(current_phase)
+    tgt_idx = SEARCH_PHASE_ORDER.index(target_phase)
+    if tgt_idx < curr_idx:
+        return "status-chip done"
+    if tgt_idx == curr_idx:
+        return "status-chip active"
+    return "status-chip"
+
+
+def _render_status_panel():
+    state = st.session_state.search_state
+    phase = state["phase"]
+    chips = []
+    for key in SEARCH_PHASE_ORDER:
+        cls = _phase_chip_state(key, phase)
+        chips.append(f"<div class='{cls}'>{PHASE_LABELS[key]}</div>")
+
+    details = STATUS_DESCRIPTIONS.get(phase, state["status_text"])
+    if state["status_text"] and state["status_text"] != details:
+        details = f"{details} {state['status_text']}"
+    telemetry = state.get("telemetry", {})
+    if telemetry.get("total_duration_ms"):
+        details = f"{details} · Dauer {telemetry['total_duration_ms']} ms"
+
+    st.markdown(
+        "<div class='glass-card'>"
+        f"<div class='status-strip'>{''.join(chips)}</div>"
+        f"<div class='meta-line'>{details}</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    if phase in {"error", "empty", "cancelled"}:
+        st.markdown(
+            f"<div class='callout'>{PHASE_LABELS[phase]}: {state['status_text']}</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def _render_results_panel():
+    state = st.session_state.search_state
+    hits = state["hits"]
+    st.markdown("### Treffer")
+    if state["phase"] in {"started", "finding_hits"} and not hits:
+        st.markdown(
+            "<div class='glass-card'>"
+            "<div class='skeleton line'></div>"
+            "<div class='skeleton line short'></div>"
+            "<div class='skeleton line'></div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    if not hits:
+        st.info("Noch keine Treffer sichtbar.")
+        return
+
+    cards = []
+    for i, chunk in enumerate(hits, start=1):
+        rel = chunk.get("relevance_score", 0)
+        src = source_label(chunk.get("source_label", ""))
+        title = f"{i}. {chunk.get('filename', '?')} (Seite {chunk.get('page', '?')})"
+        snippet = (chunk.get("text", "") or "").replace("\n", " ").strip()[:220]
+        title_esc = html.escape(title)
+        src_esc = html.escape(src)
+        snippet_esc = html.escape(snippet)
+        cards.append(
+            "<div class='result-card'>"
+            f"<div class='result-title'>{title_esc}</div>"
+            f"<div class='result-sub'>{src_esc} Â· Relevanz {rel:.0%}</div>"
+            f"<div class='result-snippet'>{snippet_esc}</div>"
+            "</div>"
+        )
+    st.markdown(
+        f"<div class='result-grid'>{''.join(cards)}</div>",
+        unsafe_allow_html=True,
+    )
+
+    with st.expander("Quellen im Detail", expanded=False):
+        for i, chunk in enumerate(hits, start=1):
+            rel = chunk.get("relevance_score", 0)
+            fname = chunk.get("filename", "?")
+            page = chunk.get("page", "?")
+            src = source_label(chunk.get("source_label", ""))
+            with st.expander(
+                f"Quelle {i}: {fname} - Seite {page} Â· {src} (Relevanz {rel:.0%})",
+                expanded=False,
+            ):
+                st.text(chunk.get("text", ""))
+
+
+def _render_answer_panel():
+    state = st.session_state.search_state
+    st.markdown("### Antwort")
+    answer = state["answer"]
+    if not answer and state["phase"] in {"started", "finding_hits", "building_answer"}:
+        st.markdown(
+            "<div class='answer-box'>"
+            "<div class='skeleton line'></div>"
+            "<div class='skeleton line'></div>"
+            "<div class='skeleton line short'></div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        return
+    if not answer:
+        st.markdown("<div class='answer-box'>Noch keine Antwort vorhanden.</div>", unsafe_allow_html=True)
+        return
+
+    css_class = "answer-box answer-streaming" if state["is_streaming"] else "answer-box"
+    safe_answer = html.escape(answer).replace("\n", "<br>")
+    st.markdown(f"<div class='{css_class}'>{safe_answer}</div>", unsafe_allow_html=True)
+
+
+def _run_search_pipeline(question: str):
+    db = get_db()
+    embedder = get_embedder()
+    active_llm = st.session_state.get("llm_model", OLLAMA_LLM_MODEL)
+    rag = get_rag(active_llm)
+
+    state = st.session_state.search_state
+    request_id = state["request_id"]
+    revision = _db_revision()
+
+    cached = _search_cache_get(question, active_llm, revision)
+    if cached:
+        age = int(time.time() - cached.get("stored_at", time.time()))
+        state = st.session_state.search_state
+        state["hits"] = list(cached.get("hits", []))
+        state["answer"] = cached.get("answer", "")
+        state["status_text"] = f"Antwort aus Cache ({age}s alt)."
+        state["is_streaming"] = False
+        telemetry = state.get("telemetry", {})
+        telemetry["cache_hit"] = True
+        telemetry["total_duration_ms"] = int((time.time() - state.get("started_at", time.time())) * 1000)
+        state["telemetry"] = telemetry
+        st.session_state.search_state = state
+        _set_phase("completed", state["status_text"])
+        _finalize_telemetry()
+        return
+
+    _set_phase("started", STATUS_DESCRIPTIONS["started"])
+    _render_status_panel()
+    _render_results_panel()
+    _render_answer_panel()
+
+    try:
+        def _cancelled() -> bool:
+            current = st.session_state.search_state
+            return current.get("cancel_requested", False) or current.get("request_id") != request_id
+
+        query_embedding = embedder.embed(question)
+        if not query_embedding:
+            raise RuntimeError("Embedding fehlgeschlagen. Ist Ollama erreichbar?")
+
+        steps = sorted({1, min(3, max(1, MAX_RESULTS)), max(1, MAX_RESULTS)})
+        prog = db.search_progressive(query_embedding=query_embedding, steps=steps)
+
+        first_context = []
+        for payload in prog:
+            if st.session_state.search_state["request_id"] != request_id:
+                return
+            if st.session_state.search_state["cancel_requested"]:
+                _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
+                return
+
+            state = st.session_state.search_state
+            state["hits"] = payload["results"]
+            if payload.get("error"):
+                state["status_text"] = f"Teilweise Suche mit Warnung: {payload['error'][:120]}"
+            else:
+                state["status_text"] = (
+                    f"{len(payload['results'])} Treffer sichtbar (Stufe {payload['step']}/{len(steps)})."
+                )
+            st.session_state.search_state = state
+            _set_phase("finding_hits", state["status_text"])
+            _render_status_panel()
+            _render_results_panel()
+            _render_answer_panel()
+
+            if payload["results"]:
+                _mark_first_hit()
+                first_context = list(payload["results"])
+                break
+            time.sleep(0.08)
+
+        if not first_context:
+            _set_phase("empty", STATUS_DESCRIPTIONS["empty"])
+            return
+
+        state = st.session_state.search_state
+        state["is_streaming"] = True
+        state["status_text"] = STATUS_DESCRIPTIONS["building_answer"]
+        st.session_state.search_state = state
+        _set_phase("building_answer", STATUS_DESCRIPTIONS["building_answer"])
+
+        answer_text = ""
+        for event in rag.answer_stream(
+            question,
+            first_context,
+            mode="initial",
+            cancel_check=_cancelled,
+        ):
+            if st.session_state.search_state["request_id"] != request_id:
+                return
+            if st.session_state.search_state["cancel_requested"]:
+                _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
+                return
+            if event["type"] == "token":
+                _mark_first_token()
+                answer_text += event["content"]
+                state = st.session_state.search_state
+                state["answer"] = answer_text
+                st.session_state.search_state = state
+                _render_status_panel()
+                _render_results_panel()
+                _render_answer_panel()
+            elif event["type"] == "meta":
+                state = st.session_state.search_state
+                state["status_text"] = event["content"]
+                st.session_state.search_state = state
+                _render_status_panel()
+            elif event["type"] == "error":
+                raise RuntimeError(event["content"])
+            elif event["type"] == "cancelled":
+                _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
+                return
+            elif event["type"] == "done":
+                answer_text = event.get("content", answer_text)
+
+        state = st.session_state.search_state
+        state["is_streaming"] = False
+        state["answer"] = answer_text or "Keine Antwort erhalten."
+        st.session_state.search_state = state
+
+        expanded = False
+        for payload in prog:
+            if st.session_state.search_state["request_id"] != request_id:
+                return
+            if st.session_state.search_state["cancel_requested"]:
+                _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
+                return
+
+            if payload["new_results"]:
+                expanded = True
+            state = st.session_state.search_state
+            state["hits"] = payload["results"]
+            state["status_text"] = (
+                f"Erweitert auf {len(payload['results'])} Treffer (Stufe {payload['step']}/{len(steps)})."
+            )
+            st.session_state.search_state = state
+            _set_phase("expanding_result", state["status_text"])
+            _render_status_panel()
+            _render_results_panel()
+            _render_answer_panel()
+            time.sleep(0.08)
+
+        if expanded and st.session_state.search_state["hits"]:
+            state = st.session_state.search_state
+            state["is_streaming"] = True
+            state["status_text"] = STATUS_DESCRIPTIONS["expanding_result"]
+            st.session_state.search_state = state
+            _set_phase("expanding_result", STATUS_DESCRIPTIONS["expanding_result"])
+            refined_answer = ""
+            for event in rag.answer_stream(
+                question,
+                st.session_state.search_state["hits"],
+                mode="refine",
+                current_answer=st.session_state.search_state["answer"],
+                cancel_check=_cancelled,
+            ):
+                if st.session_state.search_state["request_id"] != request_id:
+                    return
+                if st.session_state.search_state["cancel_requested"]:
+                    _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
+                    return
+                if event["type"] == "token":
+                    refined_answer += event["content"]
+                    state = st.session_state.search_state
+                    state["answer"] = refined_answer
+                    st.session_state.search_state = state
+                    _render_status_panel()
+                    _render_results_panel()
+                    _render_answer_panel()
+                elif event["type"] == "meta":
+                    state = st.session_state.search_state
+                    state["status_text"] = event["content"]
+                    st.session_state.search_state = state
+                    _render_status_panel()
+                elif event["type"] == "error":
+                    raise RuntimeError(event["content"])
+                elif event["type"] == "cancelled":
+                    _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
+                    return
+                elif event["type"] == "done":
+                    refined_answer = event.get("content", refined_answer)
+            state = st.session_state.search_state
+            state["answer"] = refined_answer or state["answer"]
+            state["is_streaming"] = False
+            st.session_state.search_state = state
+
+        _search_cache_put(
+            question=question,
+            llm_model=active_llm,
+            revision=revision,
+            hits=st.session_state.search_state["hits"],
+            answer=st.session_state.search_state["answer"],
+        )
+        _set_phase("completed", STATUS_DESCRIPTIONS["completed"])
+    except Exception as exc:
+        state = st.session_state.search_state
+        state["error"] = str(exc)
+        state["status_text"] = str(exc)
+        st.session_state.search_state = state
+        _set_phase("error", str(exc))
+    finally:
+        # Avoid hanging loader state after any failure path.
+        state = st.session_state.search_state
+        state["is_streaming"] = False
+        st.session_state.search_state = state
+        _finalize_telemetry()
 
 
 def tab_suche():
     st.header("Dokumentensuche")
+    _init_search_state()
 
-    db = get_db()
-    stats = db.get_stats()
+    stats = get_db_stats_cached()
     if stats["total_documents"] == 0:
-        st.info("Noch keine Dokumente indexiert. Paperless-Archiv und Inbox werden automatisch überwacht.")
+        st.info("Noch keine Dokumente indexiert. Paperless-Archiv und Inbox werden automatisch ueberwacht.")
         return
 
     st.caption(f"{stats['total_documents']} Dokumente · {stats['total_chunks']} Chunks indexiert")
 
-    # Eingabezeile: Enter-Taste via on_change, Button als Alternative
-    col_input, col_btn = st.columns([6, 1])
-    with col_input:
-        question = st.text_input(
+    left, center, right = st.columns([6, 1.2, 1.2])
+    with left:
+        query = st.text_input(
             "Frage stellen",
-            placeholder="z.B. Welche Rechnungen gibt es von 2024? — dann Enter ↵",
+            placeholder="z.B. Welche Rechnungen gibt es von 2024?",
             key="search_q",
-            on_change=_on_search_enter,
             label_visibility="collapsed",
         )
-    with col_btn:
-        if st.button("🔍 Suchen", type="primary", use_container_width=True):
-            if question.strip():
-                st.session_state["_do_search"] = True
+    with center:
+        run_search = st.button("Suchen", type="primary", use_container_width=True)
+    with right:
+        cancel_search = st.button("Abbrechen", use_container_width=True)
 
-    do_search = st.session_state.pop("_do_search", False)
+    if cancel_search:
+        _request_cancel()
 
-    # CSS einmalig injizieren (eigener DOM-Knoten, wird nicht überschrieben)
-    st.markdown(_PACMAN_CSS, unsafe_allow_html=True)
+    if run_search and query.strip():
+        _new_search(query.strip())
+        st.session_state["_do_search"] = True
+    elif run_search and not query.strip():
+        st.warning("Bitte eine Suchfrage eingeben.")
 
-    if do_search and question.strip():
-        embedder   = get_embedder()
-        active_llm = st.session_state.get("llm_model", OLLAMA_LLM_MODEL)
-        rag        = get_rag(active_llm)
-        model_name = "Claude API" if USE_CLAUDE else active_llm
-        anim       = st.empty()
+    _render_status_panel()
+    _render_results_panel()
+    _render_answer_panel()
 
-        # Schritt 1 — Pac-Man frisst Vektoren
-        anim.markdown(_pacman_step(1, 3, "Frage in Vektor-Embedding umwandeln …", 15),
-                      unsafe_allow_html=True)
-        query_emb = embedder.embed(question)
-        if not query_emb:
-            anim.error("❌ Embedding fehlgeschlagen — ist Ollama erreichbar?")
-            return
+    if st.session_state.pop("_do_search", False):
+        _run_search_pipeline(st.session_state.search_state["query"])
+        _render_status_panel()
+        _render_results_panel()
+        _render_answer_panel()
 
-        # Schritt 2 — Pac-Man frisst Dokumente
-        anim.markdown(_pacman_step(2, 3, "Ähnliche Dokumente in ChromaDB suchen …", 50),
-                      unsafe_allow_html=True)
-        chunks = db.search(query_emb, n_results=MAX_RESULTS)
-
-        # Schritt 3 — Pac-Man frisst Tokens
-        anim.markdown(_pacman_step(3, 3, f"Antwort generieren mit {model_name} …", 80),
-                      unsafe_allow_html=True)
-        st.markdown("### Antwort")
-        answer_box = st.empty()
-        answer = rag.answer(question, chunks, stream_placeholder=answer_box)
-
-        # Fertig — satter Pac-Man
-        anim.markdown(_pacman_done(), unsafe_allow_html=True)
-
-        if chunks:
-            st.markdown("### Quellen")
-            for i, chunk in enumerate(chunks, start=1):
-                rel   = chunk.get("relevance_score", 0)
-                fname = chunk.get("filename", "?")
-                page  = chunk.get("page", "?")
-                src   = source_label(chunk.get("source_label", ""))
-                with st.expander(f"Quelle {i}: {fname} — Seite {page} · {src} (Relevanz {rel:.0%})"):
-                    st.text(chunk.get("text", ""))
-
-
-# ---------------------------------------------------------------------------
-# Tab 2: Hochladen
-# ---------------------------------------------------------------------------
 
 def tab_hochladen():
     st.header("Dokument hochladen & indexieren")
-
     st.info(
-        f"**Automatisch überwacht:**\n"
-        f"- 📄 Paperless-Archiv: `{PAPERLESS_ARCHIVE}`\n"
-        f"- 📥 Inbox: `{INBOX_FOLDER}`\n\n"
-        f"Oder hier direkt hochladen:"
+        f"Automatisch ueberwacht:\n"
+        f"- Paperless-Archiv: `{PAPERLESS_ARCHIVE}`\n"
+        f"- Inbox: `{INBOX_FOLDER}`\n\n"
+        "Oder hier direkt hochladen:"
     )
 
     ext_list = ", ".join(sorted(SUPPORTED_EXTENSIONS))
-    st.caption(f"Unterstützte Formate: {ext_list}")
+    st.caption(f"Unterstuetzte Formate: {ext_list}")
 
     uploaded_files = st.file_uploader(
-        "Dateien auswählen",
+        "Dateien auswaehlen",
         type=[e.lstrip(".") for e in SUPPORTED_EXTENSIONS],
         accept_multiple_files=True,
         key="uploader",
     )
 
-    if uploaded_files:
-        if st.button("Alle indexieren", type="primary"):
-            for uf in uploaded_files:
-                file_bytes = uf.read()
-                with st.status(f"Verarbeite '{uf.name}'...", expanded=True) as status:
-                    st.write("Chunking + OCR...")
-                    success, msg = _index_file_bytes(uf.name, file_bytes)
-                    if success:
-                        status.update(label=f"'{uf.name}' — fertig", state="complete")
-                        st.success(msg)
-                    else:
-                        status.update(label=f"'{uf.name}' — übersprungen", state="error")
-                        st.warning(msg)
+    if uploaded_files and st.button("Alle indexieren", type="primary"):
+        for uf in uploaded_files:
+            file_bytes = uf.read()
+            with st.status(f"Verarbeite '{uf.name}'...", expanded=True) as status:
+                st.write("Chunking + OCR...")
+                success, msg = _index_file_bytes(uf.name, file_bytes)
+                if success:
+                    invalidate_ui_caches()
+                    status.update(label=f"'{uf.name}' - fertig", state="complete")
+                    st.success(msg)
+                else:
+                    status.update(label=f"'{uf.name}' - uebersprungen", state="error")
+                    st.warning(msg)
 
-
-# ---------------------------------------------------------------------------
-# Tab 3: Dokumente
-# ---------------------------------------------------------------------------
 
 def tab_dokumente():
     st.header("Indexierte Dokumente")
 
     db = get_db()
-    docs = db.list_documents()
-
+    docs = list_documents_cached()
     if not docs:
         st.info("Keine Dokumente indexiert.")
         return
 
-    # Gruppierung nach Quelle
     by_source: dict[str, list] = {}
     for doc in docs:
         lbl = doc.get("source_label", "unbekannt")
@@ -405,16 +940,15 @@ def tab_dokumente():
     for lbl, group in by_source.items():
         with st.expander(f"{source_label(lbl)} ({len(group)} Dokumente)", expanded=True):
             for doc in group:
-                col1, col2, col3 = st.columns([5, 2, 1])
-                with col1:
+                c1, c2, c3 = st.columns([5, 2, 1])
+                with c1:
                     st.text(f"{doc['filename']} ({doc['chunk_count']} Chunks)")
-                with col2:
+                with c2:
                     file_path = Path(doc.get("source", ""))
                     if not file_path.exists():
                         alt_path = Path(UPLOAD_FOLDER) / doc["filename"]
                         if alt_path.exists():
                             file_path = alt_path
-
                     if file_path.exists():
                         with open(file_path, "rb") as f:
                             st.download_button(
@@ -425,16 +959,13 @@ def tab_dokumente():
                             )
                     else:
                         st.caption("Datei nicht lokal")
-                with col3:
-                    if st.button("🗑", key=f"del_{lbl}_{doc['filename']}", help="Löschen"):
+                with c3:
+                    if st.button("Loeschen", key=f"del_{lbl}_{doc['filename']}"):
                         deleted = db.delete_document(doc["filename"])
-                        st.success(f"{doc['filename']} gelöscht ({deleted} Chunks).")
+                        invalidate_ui_caches()
+                        st.success(f"{doc['filename']} geloescht ({deleted} Chunks).")
                         st.rerun()
 
-
-# ---------------------------------------------------------------------------
-# Tab 4: Status
-# ---------------------------------------------------------------------------
 
 def tab_status():
     st.header("System-Status")
@@ -442,7 +973,6 @@ def tab_status():
     embedder = get_embedder()
     db = get_db()
 
-    # Ollama Status
     st.subheader("Ollama")
     ok, msg = embedder.check_connection()
     if ok:
@@ -456,110 +986,93 @@ def tab_status():
     if models:
         current_llm = st.session_state.get("llm_model", OLLAMA_LLM_MODEL)
         idx = models.index(current_llm) if current_llm in models else 0
-
         selected_llm = st.selectbox(
-            "LLM-Modell (für Antworten)",
+            "LLM-Modell (Antworten)",
             options=models,
             index=idx,
-            help="Wird sofort aktiv — kein Neustart nötig.",
+            help="Wird sofort aktiv.",
         )
         if selected_llm != st.session_state.get("llm_model"):
             st.session_state["llm_model"] = selected_llm
-            st.caption(f"✓ Wechsle auf {selected_llm}")
-
-        st.caption(f"Embedding-Modell: **{OLLAMA_EMBED_MODEL}** (in HA-Config änderbar — erfordert DB-Reset)")
+            st.caption(f"Wechsel auf {selected_llm}")
 
     st.divider()
-
-    # Watcher Status
     st.subheader("Watch-Ordner")
-    for w in _multi_watcher.watchers:
-        status = "🟢 aktiv" if w.is_running else "🔴 inaktiv"
-        icon = SOURCE_ICONS.get(w._source_label, w._source_label)
-        st.text(f"{status}  {icon}: {w._watch_folder}")
+    for watcher in _multi_watcher.watchers:
+        status = "aktiv" if watcher.is_running else "inaktiv"
+        icon = SOURCE_ICONS.get(watcher._source_label, watcher._source_label)
+        st.text(f"{status}: {icon}: {watcher._watch_folder}")
 
     st.divider()
-
-    # Indexierung
     st.subheader("Indexierung")
-    col1, col2 = st.columns([2, 3])
-    with col1:
-        if st.button("🔄 Neu indexieren", type="primary", use_container_width=True):
+    c1, c2 = st.columns([2, 3])
+    with c1:
+        if st.button("Neu indexieren", type="primary", use_container_width=True):
             _multi_watcher.reindex()
-            st.success("Gestartet — neue Dokumente erscheinen in wenigen Minuten.")
-    with col2:
-        st.caption("Nützlich nach Ollama-URL-Änderung oder wenn Dokumente fehlen.")
+            invalidate_ui_caches()
+            st.success("Gestartet - neue Dokumente erscheinen nach Verarbeitung.")
+    with c2:
+        st.caption("Nuetzlich nach Aenderungen an Ordnern oder Modellen.")
 
     st.divider()
-
-    # ChromaDB Stats + Reset
     st.subheader("Datenbank (ChromaDB)")
-    stats = db.get_stats()
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Dokumente", stats["total_documents"])
-    col2.metric("Chunks", stats["total_chunks"])
-    col3.metric("Speicher", f"{stats['db_size_mb']} MB")
+    stats = get_db_stats_cached()
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Dokumente", stats["total_documents"])
+    m2.metric("Chunks", stats["total_chunks"])
+    m3.metric("Speicher", f"{stats['db_size_mb']} MB")
 
-    st.write("")
     if "confirm_reset" not in st.session_state:
         st.session_state.confirm_reset = False
 
     if not st.session_state.confirm_reset:
-        if st.button("🗑️ Datenbank leeren", type="secondary"):
+        if st.button("Datenbank leeren"):
             st.session_state.confirm_reset = True
             st.rerun()
     else:
-        st.warning(f"⚠️ Alle {stats['total_documents']} Dokumente werden unwiderruflich gelöscht!")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("✅ Ja, alles löschen", type="primary", use_container_width=True):
+        st.warning(f"Alle {stats['total_documents']} Dokumente werden geloescht.")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Ja, alles loeschen", type="primary", use_container_width=True):
                 deleted = db.reset()
                 st.cache_resource.clear()
+                invalidate_ui_caches()
                 st.session_state.confirm_reset = False
-                st.success(f"Datenbank geleert — {deleted} Chunks gelöscht.")
+                st.success(f"Datenbank geleert - {deleted} Chunks geloescht.")
                 st.rerun()
-        with col2:
+        with c2:
             if st.button("Abbrechen", use_container_width=True):
                 st.session_state.confirm_reset = False
                 st.rerun()
 
     st.divider()
-
-    # Konfiguration
     st.subheader("Konfiguration")
     config_data = {
-        "Ollama URL":           OLLAMA_URL,
-        "Embedding-Modell":     OLLAMA_EMBED_MODEL,
-        "LLM-Modell":           OLLAMA_LLM_MODEL,
-        "LLM-Modus":            "Claude API" if USE_CLAUDE else f"Ollama ({OLLAMA_LLM_MODEL})",
-        "Paperless-Archiv":     PAPERLESS_ARCHIVE,
-        "Inbox-Ordner":         INBOX_FOLDER,
-        "OCR-Sprachen":         OCR_LANG,
-        "Max. Ergebnisse":      str(MAX_RESULTS),
-        "ChromaDB-Pfad":        CHROMADB_PATH,
+        "Ollama URL": OLLAMA_URL,
+        "Embedding-Modell": OLLAMA_EMBED_MODEL,
+        "LLM-Modell": OLLAMA_LLM_MODEL,
+        "LLM-Modus": "Claude API" if USE_CLAUDE else f"Ollama ({OLLAMA_LLM_MODEL})",
+        "Paperless-Archiv": PAPERLESS_ARCHIVE,
+        "Inbox-Ordner": INBOX_FOLDER,
+        "OCR-Sprachen": OCR_LANG,
+        "Max. Ergebnisse": str(MAX_RESULTS),
+        "ChromaDB-Pfad": CHROMADB_PATH,
     }
     for key, val in config_data.items():
-        col1, col2 = st.columns([2, 3])
-        col1.caption(key)
-        col2.text(val)
+        c1, c2 = st.columns([2, 3])
+        c1.caption(key)
+        c2.text(val)
 
 
-# ---------------------------------------------------------------------------
-# Haupt-Layout
-# ---------------------------------------------------------------------------
-
-st.title("🔍 Dokumentensuche")
-
-tab1, tab2, tab3, tab4 = st.tabs(["💬 Suche", "📤 Hochladen", "📁 Dokumente", "⚙️ Status"])
+st.title("Dokumentensuche")
+tab1, tab2, tab3, tab4 = st.tabs(["Suche", "Hochladen", "Dokumente", "Status"])
 
 with tab1:
     tab_suche()
-
 with tab2:
     tab_hochladen()
-
 with tab3:
     tab_dokumente()
-
 with tab4:
     tab_status()
+

@@ -1,38 +1,47 @@
 """
-RAG-Engine: Generiert Antworten auf Basis von Kontext-Chunks.
-
-Primär: Ollama (qwen2.5:14b oder konfiguriertes Modell) — vollständig lokal.
-Fallback: Claude API (claude-haiku-4-5) wenn USE_CLAUDE=true und API-Key gesetzt.
+RAG engine with streaming events for progressive UI rendering.
 """
 
 import json
+import time
+
 import httpx
 
 
 SYSTEM_PROMPT = """\
 Du bist ein hilfreicher Dokumenten-Assistent. Dir werden relevante Textausschnitte aus gescannten Dokumenten gegeben.
-Beantworte die Frage des Nutzers ausschließlich auf Basis der bereitgestellten Dokumentenausschnitte.
+Beantworte die Frage des Nutzers ausschliesslich auf Basis der bereitgestellten Dokumentenausschnitte.
 
 Regeln:
-- Antworte auf Deutsch, präzise und strukturiert
-- Nenne die Quelle (Dateiname + Seite) wenn du dich auf ein Dokument beziehst
+- Antworte auf Deutsch, praezise und strukturiert
+- Nenne die Quelle (Dateiname + Seite), wenn du dich auf ein Dokument beziehst
 - Wenn die Antwort nicht in den Ausschnitten steht, sage das klar
 - Keine Spekulationen oder erfundene Fakten
-- Maximal 300 Wörter pro Antwort
+- Maximal 300 Woerter pro Antwort
+"""
+
+REFINE_PROMPT = """\
+Du erhaeltst eine bestehende Antwort und zusaetzliche Quellen.
+Aktualisiere die Antwort nur dort, wo die neuen Quellen eine praezisere oder ergaenzende Information liefern.
+
+Regeln:
+- Antworte auf Deutsch, praezise und strukturiert
+- Nutze nur Informationen aus den bereitgestellten Quellen
+- Behalte bereits korrekte Informationen bei
+- Ergaenze fehlende Fakten knapp
+- Nenne Quellen (Dateiname + Seite) bei konkreten Aussagen
+- Maximal 320 Woerter
 """
 
 
 def _build_context(chunks: list[dict]) -> str:
-    """Formatiert Kontext-Chunks für den LLM-Prompt."""
     parts = []
     for i, chunk in enumerate(chunks, start=1):
         fname = chunk.get("filename", "?")
         page = chunk.get("page", "?")
         score = chunk.get("relevance_score", 0)
         text = chunk.get("text", "")
-        parts.append(
-            f"[Quelle {i}: {fname}, Seite {page}, Relevanz {score:.0%}]\n{text}"
-        )
+        parts.append(f"[Quelle {i}: {fname}, Seite {page}, Relevanz {score:.0%}]\n{text}")
     return "\n\n---\n\n".join(parts)
 
 
@@ -48,36 +57,103 @@ class RAGEngine:
         self.llm_model = llm_model
         self.use_claude = use_claude and bool(anthropic_api_key)
         self.anthropic_api_key = anthropic_api_key
-        # connect_timeout=10s, read_timeout=300s (14B-Modell braucht Zeit beim Laden)
         self._client = httpx.Client(
             timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
         )
 
     def answer(self, question: str, context_chunks: list[dict], stream_placeholder=None) -> str:
-        """Generiert eine Antwort auf `question` basierend auf `context_chunks`.
-
-        stream_placeholder: optionales Streamlit st.empty()-Objekt für Live-Streaming.
-        """
         if not context_chunks:
-            return "Keine relevanten Dokumente für diese Frage gefunden. Bitte stelle sicher, dass Dokumente indexiert sind."
+            return (
+                "Keine relevanten Dokumente fuer diese Frage gefunden. "
+                "Bitte stelle sicher, dass Dokumente indexiert sind."
+            )
+
+        full_text = ""
+        for event in self.answer_stream(question, context_chunks):
+            if event["type"] == "token":
+                full_text += event["content"]
+                if stream_placeholder:
+                    stream_placeholder.markdown(full_text + "|")
+            elif event["type"] == "done":
+                full_text = event.get("content", full_text)
+                if stream_placeholder:
+                    stream_placeholder.markdown(full_text)
+                return full_text or "Keine Antwort erhalten."
+            elif event["type"] == "error":
+                if stream_placeholder:
+                    stream_placeholder.error(event["content"])
+                return event["content"]
+            elif event["type"] == "cancelled":
+                return event["content"]
+        return full_text or "Keine Antwort erhalten."
+
+    def answer_stream(
+        self,
+        question: str,
+        context_chunks: list[dict],
+        mode: str = "initial",
+        current_answer: str = "",
+        cancel_check=None,
+    ):
+        """Structured stream events:
+        {"type":"token","content":"..."}
+        {"type":"done","content":"..."}
+        {"type":"error","content":"..."}
+        {"type":"meta","content":"..."}
+        {"type":"cancelled","content":"..."}
+        """
+        if callable(cancel_check) and cancel_check():
+            yield {"type": "cancelled", "content": "Anfrage abgebrochen."}
+            return
+
+        if not context_chunks:
+            yield {
+                "type": "done",
+                "content": (
+                    "Keine relevanten Dokumente fuer diese Frage gefunden. "
+                    "Bitte stelle sicher, dass Dokumente indexiert sind."
+                ),
+            }
+            return
 
         context = _build_context(context_chunks)
-        user_message = (
-            f"Dokumentenausschnitte:\n\n{context}\n\n"
-            f"Frage: {question}"
-        )
+        if mode == "refine":
+            system_prompt = REFINE_PROMPT
+            user_message = (
+                f"Bestehende Antwort:\n{current_answer}\n\n"
+                f"Zusaetzliche Dokumentenausschnitte:\n\n{context}\n\n"
+                f"Frage: {question}\n\n"
+                "Bitte liefere eine aktualisierte Gesamtantwort."
+            )
+        else:
+            system_prompt = SYSTEM_PROMPT
+            user_message = f"Dokumentenausschnitte:\n\n{context}\n\nFrage: {question}"
 
         if self.use_claude:
-            return self._answer_claude(user_message)
-        return self._answer_ollama(user_message, stream_placeholder)
+            try:
+                text = self._answer_claude(user_message)
+                yield {"type": "done", "content": text}
+            except Exception as exc:  # pragma: no cover - defensive
+                yield {"type": "error", "content": f"Claude-Fehler: {exc}"}
+            return
 
-    def _answer_ollama(self, user_message: str, stream_placeholder=None) -> str:
-        """Ollama Chat-Completion mit Streaming (lokal)."""
+        yield from self._stream_ollama(
+            user_message=user_message,
+            system_prompt=system_prompt,
+            cancel_check=cancel_check,
+        )
+
+    def _stream_ollama(
+        self,
+        user_message: str,
+        system_prompt: str = SYSTEM_PROMPT,
+        cancel_check=None,
+    ):
         endpoint = f"{self.ollama_url}/api/chat"
         payload = {
             "model": self.llm_model,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
             ],
             "stream": True,
@@ -87,42 +163,85 @@ class RAGEngine:
             },
         }
 
-        try:
-            full_text = ""
-            with self._client.stream("POST", endpoint, json=payload) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    token = chunk.get("message", {}).get("content", "")
-                    full_text += token
-                    # Live-Vorschau im Streamlit-Placeholder wenn übergeben
-                    if stream_placeholder and token:
-                        stream_placeholder.markdown(full_text + "▌")
-                    if chunk.get("done"):
-                        break
+        full_text = ""
+        max_attempts = 2
+        for attempt in range(1, max_attempts + 1):
+            if callable(cancel_check) and cancel_check():
+                yield {"type": "cancelled", "content": "Anfrage abgebrochen."}
+                return
+            try:
+                with self._client.stream("POST", endpoint, json=payload) as response:
+                    response.raise_for_status()
+                    for line in response.iter_lines():
+                        if callable(cancel_check) and cancel_check():
+                            response.close()
+                            yield {"type": "cancelled", "content": "Anfrage abgebrochen."}
+                            return
+                        if not line:
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        token = chunk.get("message", {}).get("content", "")
+                        if token:
+                            full_text += token
+                            yield {"type": "token", "content": token}
+                        if chunk.get("done"):
+                            break
+                yield {"type": "done", "content": full_text or "Keine Antwort erhalten."}
+                return
+            except (httpx.TimeoutException, httpx.RequestError) as exc:
+                if attempt < max_attempts and not full_text:
+                    yield {
+                        "type": "meta",
+                        "content": f"Netzwerkproblem, Retry {attempt}/{max_attempts - 1}...",
+                    }
+                    time.sleep(0.5 * attempt)
+                    continue
+                if isinstance(exc, httpx.TimeoutException):
+                    yield {
+                        "type": "error",
+                        "content": (
+                            "Zeitueberschreitung (300s). Das Modell ist wahrscheinlich noch nicht geladen. "
+                            "Tipp: Modell vorwaermen und erneut suchen."
+                        ),
+                    }
+                else:
+                    yield {"type": "error", "content": f"Verbindungsfehler zu Ollama: {exc}"}
+                return
+            except httpx.HTTPStatusError as exc:
+                yield {
+                    "type": "error",
+                    "content": f"Ollama HTTP-Fehler {exc.response.status_code}: {exc.response.text[:200]}",
+                }
+                return
 
-            if stream_placeholder:
-                stream_placeholder.markdown(full_text)
-            return full_text or "Keine Antwort erhalten."
-
-        except httpx.TimeoutException:
-            return (
-                "⏱ Zeitüberschreitung (300s). Das Modell ist wahrscheinlich noch nicht geladen.\n\n"
-                "**Tipp:** Führe einmalig aus:\n```\nollama pull qwen2.5:14b\n```\n"
-                "Dann nochmal suchen — beim zweiten Mal ist das Modell im RAM."
-            )
-        except httpx.RequestError as exc:
-            return f"Verbindungsfehler zu Ollama: {exc}"
-        except httpx.HTTPStatusError as exc:
-            return f"Ollama HTTP-Fehler {exc.response.status_code}: {exc.response.text[:200]}"
+    def _answer_ollama(self, user_message: str, stream_placeholder=None) -> str:
+        full_text = ""
+        for event in self._stream_ollama(
+            user_message=user_message,
+            system_prompt=SYSTEM_PROMPT,
+            cancel_check=None,
+        ):
+            if event["type"] == "token":
+                full_text += event["content"]
+                if stream_placeholder:
+                    stream_placeholder.markdown(full_text + "|")
+            elif event["type"] == "done":
+                final = event.get("content", full_text)
+                if stream_placeholder:
+                    stream_placeholder.markdown(final)
+                return final or "Keine Antwort erhalten."
+            elif event["type"] == "error":
+                if stream_placeholder:
+                    stream_placeholder.error(event["content"])
+                return event["content"]
+            elif event["type"] == "cancelled":
+                return event["content"]
+        return full_text or "Keine Antwort erhalten."
 
     def _answer_claude(self, user_message: str) -> str:
-        """Claude API Fallback (cloud, braucht Internet + API-Key)."""
         try:
             import anthropic
 
@@ -137,8 +256,7 @@ class RAGEngine:
             return message.content[0].text.strip()
         except ImportError:
             return self._answer_ollama(user_message)
-        except Exception as exc:
-            # Bei Claude-Fehler auf Ollama zurückfallen
+        except Exception:  # pragma: no cover - fallback path
             return self._answer_ollama(user_message)
 
     def close(self):

@@ -50,6 +50,7 @@ class VectorDB:
             metas.append({
                 "filename": chunk["filename"],
                 "source": chunk["source"],
+                "source_label": chunk.get("source_label", "unknown"),
                 "page": chunk["page"],
                 "chunk_index": chunk["chunk_index"],
                 "md5": chunk["md5"],
@@ -116,11 +117,85 @@ class VectorDB:
                 "filename": meta.get("filename", ""),
                 "page": meta.get("page", 1),
                 "source": meta.get("source", ""),
+                "source_label": meta.get("source_label", "unknown"),
                 "distance": dist,
                 "relevance_score": max(0.0, 1.0 - dist),
             })
 
         return output
+
+    def search_progressive(
+        self,
+        query_embedding: list[float],
+        steps: list[int],
+        filename_filter: str | None = None,
+    ):
+        """Progressive semantische Suche in Stufen.
+
+        Liefert pro Stufe ein Dict:
+        {
+            "step": int,
+            "limit": int,
+            "results": list[dict],       # kumulierte deduplizierte Treffer
+            "new_results": list[dict],   # nur neu hinzugekommene Treffer in dieser Stufe
+        }
+        """
+        if not query_embedding:
+            return
+
+        max_count = max(1, self._collection.count())
+        normalized_steps = []
+        for step in steps:
+            if step and step > 0:
+                normalized_steps.append(min(step, max_count))
+        if not normalized_steps:
+            normalized_steps = [min(5, max_count)]
+
+        # Reihenfolge beibehalten, doppelte Step-Limits entfernen
+        seen_limits = set()
+        deduped_steps = []
+        for limit in normalized_steps:
+            if limit in seen_limits:
+                continue
+            seen_limits.add(limit)
+            deduped_steps.append(limit)
+
+        cumulative = []
+        seen_keys: set[tuple] = set()
+
+        for idx, limit in enumerate(deduped_steps, start=1):
+            try:
+                raw = self.search(
+                    query_embedding=query_embedding,
+                    n_results=limit,
+                    filename_filter=filename_filter,
+                )
+                error = ""
+            except Exception as exc:  # defensive, search() already catches most cases
+                raw = []
+                error = str(exc)
+
+            newly_added = []
+            for item in raw:
+                key = (
+                    item.get("filename", ""),
+                    item.get("page", 1),
+                    item.get("source", ""),
+                    item.get("text", "")[:160],
+                )
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                cumulative.append(item)
+                newly_added.append(item)
+
+            yield {
+                "step": idx,
+                "limit": limit,
+                "results": list(cumulative),
+                "new_results": newly_added,
+                "error": error,
+            }
 
     def is_indexed(self, md5: str) -> bool:
         """Prüft ob ein Dokument (per MD5) bereits indexiert wurde."""
@@ -147,6 +222,7 @@ class VectorDB:
                 docs[fname] = {
                     "filename": fname,
                     "source": meta.get("source", ""),
+                    "source_label": meta.get("source_label", "unknown"),
                     "chunk_count": 0,
                 }
             docs[fname]["chunk_count"] += 1

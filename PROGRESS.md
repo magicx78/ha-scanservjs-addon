@@ -1,69 +1,53 @@
-# Projektfortschritt — ha-scanservjs-addon
+# Progress - scanservjs-rag Stabilitaet & Robustheit
 
-## Übersicht
+Datum: 2026-03-27
 
-| Addon | Version | Status |
-|-------|---------|--------|
-| scanservjs (Scanner) | 1.2.0 | ✅ Produktiv |
-| scanservjs-rag (Dokumentensuche) | 1.0.2 | 🚧 In Entwicklung |
+## Status der kurzfristig erforderlichen Punkte
 
----
+### 1) Harte serverseitige Cancelation laufender LLM-Streams
+- Status: **umgesetzt (mit dokumentierter Restgrenze)**
+- Umgesetzt:
+  - `cancel_check` in `RAGEngine.answer_stream(...)` und `_stream_ollama(...)`
+  - bei Cancel wird der aktive HTTP-Stream sofort geschlossen (`response.close()`)
+  - Event `cancelled` wird in den Such-Flow propagiert und in der UI als `cancelled` abgeschlossen
+- Warum nicht 100% "kill" garantiert:
+  - HTTP-Stream-Abbruch stoppt die laufende Antwortlieferung sofort auf Add-on-Seite.
+  - Je nach Ollama-Serververhalten kann die Backend-Generierung intern noch kurz nachlaufen.
+- Offene Restarbeit:
+  - Optionaler hartes Abort-Endpoint/Worker-Control (prozessseitiges Kill-Signal), falls der LLM-Server das unterstützt.
 
-## scanservjs-rag — Changelog
+### 2) Kleine Integrationstests fuer State-Transitions
+- Status: **umgesetzt**
+- Umgesetzt:
+  - `scanservjs-rag/app/tests/test_state_transitions.py`
+  - Pfade: `started -> ... -> completed`, `started -> empty`, `started -> ... -> error`, `started -> cancelled`
+  - Guard-Test fuer ungueltige Transitionen
+  - State-Transition-Logik zentral in `scanservjs-rag/app/lib/state_machine.py`
 
-### v1.0.2 (aktuell)
-- ✅ **Dual-Watch**: Paperless-Archiv (rekursiv) + eigene Inbox
-- ✅ **Enter-Taste**: on_change-Callback, zuverlässig in st.tabs
-- ✅ **Suchanimation**: st.status (Spinner) + st.progress (0→33→66→100%)
-- ✅ **Dokumente nach Quelle gruppiert**: Paperless / Inbox / Hochgeladen
-- ✅ **Addon-Icons**: icon.png + logo.png für HA Store
-- ✅ **Debian-Base**: onnxruntime-Wheel-Fix (Alpine hatte kein musl-Wheel)
+### 3) Telemetrie pro Phase
+- Status: **umgesetzt**
+- Umgesetzt:
+  - Messung `first_hit_at`, `first_token_at`, `total_duration_ms`, `cache_hit`
+  - Logging via `logger.info(...)` bei Finalisierung des Suchlaufs
+  - Anzeige `total_duration_ms` im Statuspanel
 
-### v1.0.0
-- ✅ Streamlit-UI: Suche / Hochladen / Dokumente / Status
-- ✅ ChromaDB embedded (/data/chromadb/)
-- ✅ Ollama nomic-embed-text Embeddings
-- ✅ Claude API (primär) oder Ollama LLM (Fallback)
-- ✅ OCR Tesseract deu+eng, PDF/JPG/PNG/TIFF/TXT
-- ✅ MD5 Duplikat-Erkennung
+### 4) UI-Feintuning fuer lange Dokumente/Antworten
+- Status: **teilweise umgesetzt + manuell pruefen**
+- Umgesetzt:
+  - Antwortbereich stabilisiert (`max-height`, `overflow:auto`, `word-break`, konstante Box-Geometrie)
+  - verhindert Layout-Spruenge bei langen Antworten
+- Offen:
+  - visuelles Fine-Tuning mit echten langen Produktionsdokumenten (manueller Geräte-/Browser-Check)
 
----
+## Weitere umgesetzte Stabilitaetsarbeiten
+- Query-Cache mit TTL + DB-Revision-Key (verhindert veraltete Trefferanzeigen)
+- dedizierte Data-Caches fuer `get_stats`/`list_documents`
+- zentrale Cache-Invalidierung nach Upload/Delete/Reindex/Reset
+- Retry-Strategie bei transienten Netzwerkproblemen im Streaming
+- Schutz gegen haengende Loader via finaler Streaming-Reset
 
-## Architektur
-
-    Paperless archive/     /share/rag-inbox/    Direkt-Upload
-          │                      │                   │
-          └──────────────────────┴───────────────────┘
-                                 │
-                          FolderWatcher
-                                 │
-                   Ollama nomic-embed-text
-                                 │
-                            ChromaDB
-                                 │
-                    Claude API / Ollama LLM
-                                 │
-                      Streamlit (Port 7860)
-
----
-
-## Offene Punkte
-
-- [ ] Ollama installieren und Modelle pullen:
-      ollama pull nomic-embed-text
-      ollama pull qwen2.5:14b
-- [ ] Speicher: Webtop (6GB) + Dashy (3.2GB) + Guacamole (2.3GB) löschen
-- [ ] Nach Ollama-Start: Erstlauf indexiert alle Paperless-Dokumente automatisch
-
----
-
-## System
-
-| | |
-|--|--|
-| Hardware | i9, 20 Kerne, 32 GB RAM |
-| Disk | 70.2 GB (93% voll) |
-| HA | 2026.3.4 |
-| Embed-Modell | nomic-embed-text |
-| LLM | qwen2.5:14b oder Claude API |
-| Vektordatenbank | ChromaDB embedded |
+## Später optional (noch offen)
+- Delta-Refinement statt Voll-Refinement
+- Confidence-Badges + Deep-Links pro Quelle
+- Background-Queue fuer parallele Suche/Antwortaktualisierung
+- Feature-Flag fuer alternative Retrieval-Stufen (z. B. 1/2/5, 1/3/8)
