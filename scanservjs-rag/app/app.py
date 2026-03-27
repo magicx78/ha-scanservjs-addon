@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from lib.chunker import DocumentChunker, SUPPORTED_EXTENSIONS
 from lib.embedder import OllamaEmbedder
 from lib.rag import RAGEngine
+from lib.search_service import SearchService
 from lib.search_cache import PersistentSearchCache
 from lib.vector_db import VectorDB
 from lib.watcher import FolderWatcher, MultiWatcher
@@ -49,15 +50,16 @@ STREAM_MAX_RETRIES = int(os.environ.get("STREAM_MAX_RETRIES", "3"))
 STREAM_RETRY_BASE_SECONDS = float(os.environ.get("STREAM_RETRY_BASE_SECONDS", "0.4"))
 STREAM_RETRY_JITTER_SECONDS = float(os.environ.get("STREAM_RETRY_JITTER_SECONDS", "0.25"))
 ENABLE_REFINE = os.environ.get("ENABLE_REFINE", "false").lower() == "true"
+USE_SEARCH_STREAMING = os.environ.get("USE_SEARCH_STREAMING", "true").lower() == "true"
 
 SEARCH_PHASE_ORDER = [
     "started",
-    "finding_hits",
-    "building_answer",
-    "expanding_result",
-    "completed",
+    "retrieving",
+    "reranking",
+    "generating_answer",
+    "done",
 ]
-TERMINAL_PHASES = {"completed", "empty", "error", "cancelled"}
+TERMINAL_PHASES = {"done", "error"}
 
 SOURCE_ICONS = {
     "paperless": "Paperless",
@@ -66,25 +68,23 @@ SOURCE_ICONS = {
 }
 
 PHASE_LABELS = {
+    "idle": "Bereit",
     "started": "Suche gestartet",
-    "finding_hits": "Treffer werden gefunden",
-    "building_answer": "Verarbeitung / Antwortaufbau laeuft",
-    "expanding_result": "Ergebnis wird erweitert",
-    "completed": "Abgeschlossen",
-    "empty": "Leerzustand",
+    "retrieving": "Treffer werden geladen",
+    "reranking": "Treffer werden sortiert",
+    "generating_answer": "Antwort wird aufgebaut",
+    "done": "Abgeschlossen",
     "error": "Fehler",
-    "cancelled": "Abgebrochen",
 }
 
 STATUS_DESCRIPTIONS = {
+    "idle": "Bereit fuer neue Suche.",
     "started": "Anfrage initialisiert und Suchlauf vorbereitet.",
-    "finding_hits": "Erste relevante Quellen werden semantisch ermittelt.",
-    "building_answer": "Antwort wird live aus den ersten Treffern aufgebaut.",
-    "expanding_result": "Antwort wird mit weiteren Treffern erweitert.",
-    "completed": "Suchlauf ist abgeschlossen.",
-    "empty": "Es wurden keine relevanten Treffer gefunden.",
+    "retrieving": "Treffer werden semantisch ermittelt.",
+    "reranking": "Treffer werden nach Relevanz final sortiert.",
+    "generating_answer": "Antwort wird live aus Treffern erzeugt.",
+    "done": "Suchlauf ist abgeschlossen.",
     "error": "Die Verarbeitung wurde mit Fehler beendet.",
-    "cancelled": "Anfrage wurde manuell abgebrochen.",
 }
 
 DESIGN_CSS = """
@@ -788,9 +788,13 @@ def _init_search_state():
     st.session_state.search_state = {
         "request_id": 0,
         "query": "",
-        "phase": "completed",
+        "phase": "idle",
         "error": "",
-        "status_text": "Bereit",
+        "status_text": STATUS_DESCRIPTIONS["idle"],
+        "statusMessage": STATUS_DESCRIPTIONS["idle"],
+        "progressSteps": [],
+        "partialResults": [],
+        "finalResult": {"hits": [], "answer": ""},
         "hits": [],
         "answer": "",
         "is_streaming": False,
@@ -882,11 +886,33 @@ def _search_cache_put(question: str, llm_model: str, revision: int, hits: list[d
         pass
 
 
+def _build_progress_steps(current_phase: str) -> list[dict]:
+    steps = [{"phase": p, "label": PHASE_LABELS[p], "state": "pending"} for p in SEARCH_PHASE_ORDER]
+    if current_phase == "error":
+        return steps
+    if current_phase == "idle":
+        return steps
+    if current_phase not in SEARCH_PHASE_ORDER:
+        return steps
+
+    active_idx = SEARCH_PHASE_ORDER.index(current_phase)
+    for idx, step in enumerate(steps):
+        if idx < active_idx:
+            step["state"] = "done"
+        elif idx == active_idx:
+            step["state"] = "active"
+    return steps
+
+
 def _set_phase(phase: str, status_text: str = ""):
     state = st.session_state.search_state
-    state["phase"] = normalize_transition(state.get("phase", "completed"), phase)
+    state["phase"] = normalize_transition(state.get("phase", "idle"), phase)
     if status_text:
         state["status_text"] = status_text
+        state["statusMessage"] = status_text
+    else:
+        state["statusMessage"] = STATUS_DESCRIPTIONS.get(state["phase"], state.get("status_text", ""))
+    state["progressSteps"] = _build_progress_steps(state["phase"])
     if phase == "started":
         state["started_at"] = time.time()
     if phase in TERMINAL_PHASES:
@@ -902,6 +928,10 @@ def _new_search(query: str):
     state["phase"] = "started"
     state["error"] = ""
     state["status_text"] = STATUS_DESCRIPTIONS["started"]
+    state["statusMessage"] = STATUS_DESCRIPTIONS["started"]
+    state["progressSteps"] = _build_progress_steps("started")
+    state["partialResults"] = []
+    state["finalResult"] = {"hits": [], "answer": ""}
     state["hits"] = []
     state["answer"] = ""
     state["is_streaming"] = False
@@ -921,9 +951,12 @@ def _request_cancel():
     state = st.session_state.search_state
     state["cancel_requested"] = True
     state["is_streaming"] = False
-    state["status_text"] = STATUS_DESCRIPTIONS["cancelled"]
-    state["phase"] = "cancelled"
+    state["status_text"] = "Anfrage wurde abgebrochen."
+    state["statusMessage"] = state["status_text"]
+    state["phase"] = "error"
+    state["error"] = state["status_text"]
     state["completed_at"] = time.time()
+    state["progressSteps"] = _build_progress_steps("error")
     st.session_state.search_state = state
 
 
@@ -1013,21 +1046,19 @@ def _consume_stream_events(stream_builder, cancel_check):
 
 
 def _phase_chip_state(target_phase: str, current_phase: str) -> str:
-    if current_phase in {"error", "empty", "cancelled"}:
-        if target_phase == "completed":
-            return "status-chip problem"
-        if target_phase in SEARCH_PHASE_ORDER and SEARCH_PHASE_ORDER.index(target_phase) < 2:
-            return "status-chip done"
+    if current_phase == "error":
+        return "status-chip problem"
+    if current_phase == "idle":
         return "status-chip"
-    if current_phase not in SEARCH_PHASE_ORDER:
-        return "status-chip"
-
-    curr_idx = SEARCH_PHASE_ORDER.index(current_phase)
-    tgt_idx = SEARCH_PHASE_ORDER.index(target_phase)
-    if tgt_idx < curr_idx:
+    if current_phase == "done":
         return "status-chip done"
-    if tgt_idx == curr_idx:
-        return "status-chip active"
+    if current_phase in SEARCH_PHASE_ORDER:
+        curr_idx = SEARCH_PHASE_ORDER.index(current_phase)
+        tgt_idx = SEARCH_PHASE_ORDER.index(target_phase)
+        if tgt_idx < curr_idx:
+            return "status-chip done"
+        if tgt_idx == curr_idx:
+            return "status-chip active"
     return "status-chip"
 
 
@@ -1039,13 +1070,11 @@ def _render_status_panel():
         cls = _phase_chip_state(key, phase)
         chips.append(f"<div class='{cls}'>{PHASE_LABELS[key]}</div>")
 
-    details = STATUS_DESCRIPTIONS.get(phase, state["status_text"])
-    if state["status_text"] and state["status_text"] != details:
-        details = f"{details} {state['status_text']}"
+    details = state.get("statusMessage") or STATUS_DESCRIPTIONS.get(phase, state["status_text"])
     telemetry = state.get("telemetry", {})
     if telemetry.get("total_duration_ms"):
         details = f"{details} · Dauer {telemetry['total_duration_ms']} ms"
-    if phase in {"finding_hits", "building_answer", "expanding_result"}:
+    if phase in {"retrieving", "reranking", "generating_answer"}:
         details = (
             f"{details} "
             "<span class='spark'></span><span class='spark'></span><span class='spark'></span>"
@@ -1058,9 +1087,9 @@ def _render_status_panel():
         "</div>",
         unsafe_allow_html=True,
     )
-    if phase in {"error", "empty", "cancelled"}:
+    if phase in {"error"}:
         st.markdown(
-            f"<div class='callout'>{PHASE_LABELS[phase]}: {state['status_text']}</div>",
+            f"<div class='callout'>{PHASE_LABELS.get(phase, phase)}: {state['status_text']}</div>",
             unsafe_allow_html=True,
         )
 
@@ -1072,15 +1101,35 @@ def _render_results_panel(slot=None, interactive: bool = True):
 
     panel = target.container()
     panel.markdown("### Treffer")
-    if state["phase"] in {"started", "finding_hits", "building_answer", "expanding_result"}:
+    status_msg = state.get("statusMessage") or state.get("status_text") or STATUS_DESCRIPTIONS.get("idle")
+    panel.caption(status_msg)
+    progress_steps = state.get("progressSteps", [])
+    if progress_steps:
+        chips = []
+        for step in progress_steps:
+            css_cls = "status-chip"
+            if step.get("state") == "active":
+                css_cls = "status-chip active"
+            elif step.get("state") == "done":
+                css_cls = "status-chip done"
+            elif state.get("phase") == "error":
+                css_cls = "status-chip problem"
+            chips.append(f"<div class='{css_cls}'>{html.escape(step.get('label', ''))}</div>")
+        panel.markdown(
+            "<div class='status-strip'>" + "".join(chips) + "</div>",
+            unsafe_allow_html=True,
+        )
+
+    if state["phase"] in {"started", "retrieving", "reranking", "generating_answer"}:
+        hit_count = len(state.get("partialResults", hits))
         panel.markdown(
             "<div class='live-row'>"
-            "<span>Live-Suche laeuft</span>"
+            f"<span>Live-Suche laeuft · {hit_count} Treffer sichtbar</span>"
             "<span class='spark'></span><span class='spark'></span><span class='spark'></span>"
             "</div>",
             unsafe_allow_html=True,
         )
-    if state["phase"] in {"started", "finding_hits"} and not hits:
+    if state["phase"] in {"started", "retrieving", "reranking"} and not hits:
         panel.markdown(
             "<div class='glass-card'>"
             "<div class='skeleton line'></div>"
@@ -1154,8 +1203,9 @@ def _render_answer_panel(slot=None):
         msg = html.escape(state.get("error") or state.get("status_text") or "Unbekannter Fehler")
         target.markdown(f"<div class='answer-box'>Fehler: {msg}</div>", unsafe_allow_html=True)
         return
-    show_pacman = state["phase"] in {"started", "finding_hits", "building_answer", "expanding_result"} or state["is_streaming"]
-    if not answer and state["phase"] in {"started", "finding_hits", "building_answer"}:
+    show_pacman = state["phase"] in {"started", "retrieving", "reranking", "generating_answer"} or state["is_streaming"]
+    if not answer and state["phase"] in {"started", "retrieving", "reranking", "generating_answer"}:
+        status_msg = html.escape(state.get("statusMessage", "Antwort wird vorbereitet..."))
         target.markdown(
             "<div class='answer-box'>"
             "<div class='pacman-row'>"
@@ -1163,6 +1213,7 @@ def _render_answer_panel(slot=None):
             "<span>Pac-Man sucht und spuckt gleich die Antwort aus...</span>"
             "<span class='pacman-dots'><span class='pacman-dot'></span><span class='pacman-dot'></span><span class='pacman-dot'></span></span>"
             "</div>"
+            f"<div class='meta-line'>{status_msg}</div>"
             "<div class='skeleton line'></div>"
             "<div class='skeleton line short'></div>"
             "</div>",
@@ -1195,6 +1246,12 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
     embedder = get_embedder()
     active_llm = st.session_state.get("llm_model", OLLAMA_LLM_MODEL)
     rag = get_rag(active_llm)
+    search_service = SearchService(
+        db=db,
+        embedder=embedder,
+        rag=rag,
+        max_results=MAX_RESULTS,
+    )
 
     state = st.session_state.search_state
     request_id = state["request_id"]
@@ -1204,16 +1261,23 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
     if cached:
         age = int(time.time() - cached.get("stored_at", time.time()))
         state = st.session_state.search_state
-        state["hits"] = list(cached.get("hits", []))
-        state["answer"] = cached.get("answer", "")
+        cached_hits = list(cached.get("hits", []))
+        cached_answer = cached.get("answer", "")
+        state["hits"] = cached_hits
+        state["partialResults"] = cached_hits
+        state["answer"] = cached_answer
+        state["finalResult"] = {"hits": cached_hits, "answer": cached_answer}
         state["status_text"] = f"Antwort aus Cache ({age}s alt)."
+        state["statusMessage"] = state["status_text"]
         state["is_streaming"] = False
         telemetry = state.get("telemetry", {})
         telemetry["cache_hit"] = True
         telemetry["total_duration_ms"] = int((time.time() - state.get("started_at", time.time())) * 1000)
         state["telemetry"] = telemetry
         st.session_state.search_state = state
-        _set_phase("completed", state["status_text"])
+        _set_phase("done", state["status_text"])
+        _render_results_panel(results_slot)
+        _render_answer_panel(answer_slot)
         _finalize_telemetry()
         return
 
@@ -1226,113 +1290,139 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
             current = st.session_state.search_state
             return current.get("cancel_requested", False) or current.get("request_id") != request_id
 
-        query_embedding = embedder.embed(question)
-        if not query_embedding:
-            raise RuntimeError("Embedding fehlgeschlagen. Ist Ollama erreichbar?")
-
-        steps = sorted({1, max(1, MAX_RESULTS)})
-        prog = db.search_progressive(query_embedding=query_embedding, steps=steps)
-
-        first_context = []
-        for payload in prog:
-            if st.session_state.search_state["request_id"] != request_id:
-                return
-            if st.session_state.search_state["cancel_requested"]:
-                _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
-                return
-
+        if not USE_SEARCH_STREAMING:
+            result = search_service.search(question, cancel_check=_cancelled)
             state = st.session_state.search_state
-            state["hits"] = payload["results"]
-            if payload.get("error"):
-                state["status_text"] = f"Teilweise Suche mit Warnung: {payload['error'][:120]}"
-            else:
-                state["status_text"] = (
-                    f"{len(payload['results'])} Treffer sichtbar (Stufe {payload['step']}/{len(steps)})."
-                )
+            state["hits"] = list(result.get("hits", []))
+            state["partialResults"] = list(result.get("hits", []))
+            state["answer"] = result.get("answer", "")
+            state["finalResult"] = {"hits": list(result.get("hits", [])), "answer": state["answer"]}
+            state["status_text"] = result.get("statusMessage", "Suche abgeschlossen.")
+            state["statusMessage"] = state["status_text"]
+            state["is_streaming"] = False
             st.session_state.search_state = state
-            _set_phase("finding_hits", state["status_text"])
-            _render_results_panel(results_slot, interactive=False)
-            _render_answer_panel(answer_slot)
-
-            if payload["results"]:
-                _mark_first_hit()
-                first_context = list(payload["results"])
-                break
-            time.sleep(0.01)
-
-        if not first_context:
-            _set_phase("empty", STATUS_DESCRIPTIONS["empty"])
+            _set_phase("done", state["status_text"])
+            _search_cache_put(
+                question=question,
+                llm_model=active_llm,
+                revision=revision,
+                hits=state["hits"],
+                answer=state["answer"],
+            )
             return
 
-        # Ensure full relevant hit set is visible quickly (not only first hit).
-        all_hits = db.search(query_embedding, n_results=max(1, MAX_RESULTS))
-        if all_hits:
-            state = st.session_state.search_state
-            state["hits"] = all_hits
-            state["status_text"] = f"{len(all_hits)} Treffer nach Relevanz."
-            st.session_state.search_state = state
-            _render_results_panel(results_slot, interactive=False)
-            _render_answer_panel(answer_slot)
-            first_context = all_hits
+        stream_failed = None
+        done_received = False
 
-        state = st.session_state.search_state
-        state["is_streaming"] = True
-        state["status_text"] = STATUS_DESCRIPTIONS["building_answer"]
-        st.session_state.search_state = state
-        _set_phase("building_answer", STATUS_DESCRIPTIONS["building_answer"])
-
-        answer_text = ""
-        for event in _consume_stream_events(
-            lambda cancel_cb: rag.answer_stream(
-                question,
-                first_context,
-                mode="initial",
-                cancel_check=cancel_cb,
-            ),
-            cancel_check=_cancelled,
-        ):
+        for event in search_service.search_stream(question, cancel_check=_cancelled):
             if st.session_state.search_state["request_id"] != request_id:
                 return
-            if st.session_state.search_state["cancel_requested"]:
-                _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
-                return
-            if event["type"] == "token":
-                _mark_first_token()
-                answer_text += event["content"]
-                state = st.session_state.search_state
-                state["answer"] = answer_text
+            if st.session_state.search_state.get("cancel_requested"):
+                raise RuntimeError("Anfrage wurde abgebrochen.")
+
+            event_type = event.get("type")
+            state = st.session_state.search_state
+
+            if event_type == "started":
+                _set_phase("started", event.get("statusMessage", STATUS_DESCRIPTIONS["started"]))
+            elif event_type == "retrieving":
+                _set_phase("retrieving", event.get("statusMessage", STATUS_DESCRIPTIONS["retrieving"]))
+            elif event_type == "reranking":
+                _set_phase("reranking", event.get("statusMessage", STATUS_DESCRIPTIONS["reranking"]))
+            elif event_type == "partial_results":
+                partial = list(event.get("partialResults", []))
+                state["partialResults"] = partial
+                state["hits"] = partial
+                state["status_text"] = event.get("statusMessage", f"{len(partial)} Treffer sichtbar.")
+                state["statusMessage"] = state["status_text"]
                 st.session_state.search_state = state
+                if partial:
+                    _mark_first_hit()
+                # Keep current active retrieval/reranking phase, default to retrieving.
+                if st.session_state.search_state.get("phase") not in {"reranking"}:
+                    _set_phase("retrieving", state["status_text"])
+            elif event_type == "generating_answer":
+                answer_text = event.get("answer", state.get("answer", ""))
+                if event.get("answerDelta"):
+                    _mark_first_token()
+                state["is_streaming"] = True
+                state["answer"] = answer_text
+                state["status_text"] = event.get("statusMessage", STATUS_DESCRIPTIONS["generating_answer"])
+                state["statusMessage"] = state["status_text"]
+                state["finalResult"] = {
+                    "hits": list(state.get("hits", [])),
+                    "answer": answer_text,
+                }
+                st.session_state.search_state = state
+                _set_phase("generating_answer", state["status_text"])
+            elif event_type == "done":
+                done_received = True
+                final_hits = list(event.get("hits", state.get("hits", [])))
+                final_answer = event.get("answer", state.get("answer", ""))
+                status_msg = event.get("statusMessage", STATUS_DESCRIPTIONS["done"])
+                state["hits"] = final_hits
+                state["partialResults"] = final_hits
+                state["answer"] = final_answer
+                state["finalResult"] = {"hits": final_hits, "answer": final_answer}
+                state["status_text"] = status_msg
+                state["statusMessage"] = status_msg
+                state["is_streaming"] = False
+                st.session_state.search_state = state
+                _set_phase("done", status_msg)
+                _search_cache_put(
+                    question=question,
+                    llm_model=active_llm,
+                    revision=revision,
+                    hits=final_hits,
+                    answer=final_answer,
+                )
                 _render_results_panel(results_slot, interactive=False)
                 _render_answer_panel(answer_slot)
-            elif event["type"] == "meta":
-                state = st.session_state.search_state
-                state["status_text"] = event["content"]
-                st.session_state.search_state = state
-            elif event["type"] == "error":
-                raise RuntimeError(event["content"])
-            elif event["type"] == "cancelled":
-                _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
-                return
-            elif event["type"] == "done":
-                answer_text = event.get("content", answer_text)
+                break
+            elif event_type == "error":
+                stream_failed = RuntimeError(event.get("message", "Unbekannter Streaming-Fehler"))
+                raise stream_failed
 
-        state = st.session_state.search_state
-        state["is_streaming"] = False
-        state["answer"] = answer_text or "Keine Antwort erhalten."
-        st.session_state.search_state = state
+            _render_results_panel(results_slot, interactive=False)
+            _render_answer_panel(answer_slot)
 
-        _search_cache_put(
-            question=question,
-            llm_model=active_llm,
-            revision=revision,
-            hits=st.session_state.search_state["hits"],
-            answer=st.session_state.search_state["answer"],
-        )
-        _set_phase("completed", STATUS_DESCRIPTIONS["completed"])
+        if not done_received and stream_failed is None:
+            stream_failed = RuntimeError("Streaming-Ende ohne done-Event.")
+            raise stream_failed
+
+    except RuntimeError as exc:
+        # Fallback for environments where streaming path is not available.
+        if "Streaming-Ende ohne done-Event" in str(exc):
+            result = search_service.search(question, cancel_check=lambda: False)
+            state = st.session_state.search_state
+            state["hits"] = list(result.get("hits", []))
+            state["partialResults"] = list(result.get("hits", []))
+            state["answer"] = result.get("answer", "")
+            state["finalResult"] = {"hits": list(result.get("hits", [])), "answer": state["answer"]}
+            state["status_text"] = result.get("statusMessage", "Fallback-Suche abgeschlossen.")
+            state["statusMessage"] = state["status_text"]
+            state["is_streaming"] = False
+            st.session_state.search_state = state
+            _set_phase("done", state["status_text"])
+            _search_cache_put(
+                question=question,
+                llm_model=active_llm,
+                revision=revision,
+                hits=state["hits"],
+                answer=state["answer"],
+            )
+        else:
+            state = st.session_state.search_state
+            state["error"] = str(exc)
+            state["status_text"] = str(exc)
+            state["statusMessage"] = str(exc)
+            st.session_state.search_state = state
+            _set_phase("error", str(exc))
     except Exception as exc:
         state = st.session_state.search_state
         state["error"] = str(exc)
         state["status_text"] = str(exc)
+        state["statusMessage"] = str(exc)
         st.session_state.search_state = state
         _set_phase("error", str(exc))
     finally:
@@ -1340,6 +1430,8 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
         state = st.session_state.search_state
         state["is_streaming"] = False
         st.session_state.search_state = state
+        _render_results_panel(results_slot)
+        _render_answer_panel(answer_slot)
         _finalize_telemetry()
 
 

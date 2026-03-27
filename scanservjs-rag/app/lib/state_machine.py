@@ -3,7 +3,13 @@ Search state transition helpers.
 """
 
 PHASES = (
+    "idle",
     "started",
+    "retrieving",
+    "reranking",
+    "generating_answer",
+    "done",
+    # legacy phases kept for backward compatibility
     "finding_hits",
     "building_answer",
     "expanding_result",
@@ -13,11 +19,31 @@ PHASES = (
     "cancelled",
 )
 
-TERMINAL = {"completed", "empty", "error", "cancelled"}
+TERMINAL = {"done", "completed", "empty", "error", "cancelled"}
 
 ALLOWED = {
+    "idle": {"started"},
+    # New phase flow
+    "done": {"started"},
+    "started": {
+        "retrieving",
+        "done",
+        "finding_hits",  # legacy
+        "error",
+        "cancelled",
+        "empty",
+    },
+    "retrieving": {
+        "reranking",
+        "generating_answer",
+        "error",
+        "cancelled",
+        "empty",
+    },
+    "reranking": {"generating_answer", "done", "error", "cancelled", "empty"},
+    "generating_answer": {"done", "error", "cancelled"},
+    # Legacy flow
     "completed": {"started"},
-    "started": {"finding_hits", "error", "cancelled", "empty"},
     "finding_hits": {"building_answer", "empty", "error", "cancelled", "expanding_result"},
     "building_answer": {"expanding_result", "completed", "error", "cancelled"},
     "expanding_result": {"completed", "error", "cancelled"},

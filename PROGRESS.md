@@ -110,3 +110,23 @@ Datum: 2026-03-27
   - komplette Ueberschreibung kritischer Streamlit-Defaults fuer dunkle Flaechen.
   - konsistente Farben fuer Hintergrund, Container, Trefferkarten, Tabs, Expander, Buttons, Inputs, Dropdowns und Info-/Statusboxen.
   - Lesbarkeit und Kontraste in allen Kernbereichen verbessert.
+
+## Nachtrag 2026-03-27 (Release 1.0.18)
+- Streaming-Suchfluss auf feste Phasen umgestellt:
+  - `started`, `retrieving`, `reranking`, `partial_results`, `generating_answer`, `done`, `error`.
+- Backend-kompatible Suchservice-Schicht ergaenzt:
+  - normaler Endpoint: `SearchService.search(...)` (one-shot, Rueckwaertskompatibilitaet)
+  - Streaming-Endpoint: `SearchService.search_stream(...)` (progressive Events)
+- Frontend-State erweitert (ohne Layout-Aenderung):
+  - `statusMessage`, `progressSteps`, `partialResults`, `finalResult`
+  - weiterhin exakt 2 Hauptbereiche: Trefferfenster + Antwortfenster
+- UX:
+  - Statuszeile + kompakte Step-Liste direkt im bestehenden Trefferfenster
+  - Teiltreffer werden sofort im Trefferfenster sichtbar
+  - Zwischenstatus und Streaming-Antwort nur im bestehenden Antwortfenster
+- Fallback:
+  - `USE_SEARCH_STREAMING=false` nutzt automatisch den normalen Such-Endpoint
+  - keine Breaking Changes fuer bestehende Clients
+- Tests:
+  - neue Tests fuer Search-Service-Events
+  - State-Transition-Tests fuer neue Phase-Kette ergaenzt
