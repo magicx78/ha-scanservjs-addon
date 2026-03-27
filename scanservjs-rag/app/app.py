@@ -503,37 +503,53 @@ def get_multi_watcher() -> MultiWatcher:
     watchers = []
 
     if PAPERLESS_ARCHIVE and PAPERLESS_ARCHIVE != "null":
-        watchers.append(
-            FolderWatcher(
-                watch_folder=PAPERLESS_ARCHIVE,
-                db=db,
-                embedder=embedder,
-                ocr_lang=OCR_LANG,
-                source_label="paperless",
-                recursive=True,
+        try:
+            watchers.append(
+                FolderWatcher(
+                    watch_folder=PAPERLESS_ARCHIVE,
+                    db=db,
+                    embedder=embedder,
+                    ocr_lang=OCR_LANG,
+                    source_label="paperless",
+                    recursive=True,
+                )
             )
-        )
+        except Exception as exc:
+            logger.exception("Paperless-Watcher konnte nicht erstellt werden: %s", exc)
 
     if INBOX_FOLDER and INBOX_FOLDER != "null":
-        Path(INBOX_FOLDER).mkdir(parents=True, exist_ok=True)
-        watchers.append(
-            FolderWatcher(
-                watch_folder=INBOX_FOLDER,
-                db=db,
-                embedder=embedder,
-                ocr_lang=OCR_LANG,
-                source_label="inbox",
-                recursive=False,
+        try:
+            Path(INBOX_FOLDER).mkdir(parents=True, exist_ok=True)
+            watchers.append(
+                FolderWatcher(
+                    watch_folder=INBOX_FOLDER,
+                    db=db,
+                    embedder=embedder,
+                    ocr_lang=OCR_LANG,
+                    source_label="inbox",
+                    recursive=False,
+                )
             )
-        )
+        except Exception as exc:
+            logger.exception("Inbox-Watcher konnte nicht erstellt werden: %s", exc)
 
     multi = MultiWatcher(watchers)
-    multi.index_all_existing()
-    multi.start_all()
+    try:
+        multi.index_all_existing()
+    except Exception as exc:
+        logger.exception("Indexierung beim Start fehlgeschlagen: %s", exc)
+    try:
+        multi.start_all()
+    except Exception as exc:
+        logger.exception("Watcher-Start fehlgeschlagen: %s", exc)
     return multi
 
 
-_multi_watcher = get_multi_watcher()
+try:
+    _multi_watcher = get_multi_watcher()
+except Exception as exc:
+    logger.exception("Watcher-Initialisierung komplett fehlgeschlagen: %s", exc)
+    _multi_watcher = MultiWatcher([])
 
 
 def md5_bytes(data: bytes) -> str:
@@ -826,12 +842,20 @@ def _maybe_open_doc_download_dialog():
 
 def _render_llm_selector(prefix: str = "search"):
     embedder = get_embedder()
-    models = embedder.list_models()
+    models = embedder.list_chat_models()
     current_llm = st.session_state.get("llm_model", OLLAMA_LLM_MODEL)
 
     if not models:
-        st.error("LLM-Modelle konnten nicht geladen werden (Ollama offline?).")
-        return current_llm, False
+        fallback_models = embedder.list_models()
+        if fallback_models:
+            models = fallback_models
+            st.warning(
+                "Konnte chatfaehige Modelle nicht sicher erkennen. "
+                "Bitte nur LLM-Modelle (keine Embedding-Modelle) auswaehlen."
+            )
+        else:
+            st.error("LLM-Modelle konnten nicht geladen werden (Ollama offline?).")
+            return current_llm, False
 
     if current_llm not in models:
         current_llm = models[0]

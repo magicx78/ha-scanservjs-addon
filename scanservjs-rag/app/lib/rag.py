@@ -3,6 +3,7 @@ RAG engine with streaming events for progressive UI rendering.
 """
 
 import json
+import logging
 import random
 import time
 
@@ -33,6 +34,8 @@ Regeln:
 - Nenne Quellen (Dateiname + Seite) bei konkreten Aussagen
 - Maximal 320 Woerter
 """
+
+logger = logging.getLogger("scanservjs-rag")
 
 
 def _build_context(chunks: list[dict]) -> str:
@@ -233,10 +236,21 @@ class RAGEngine:
                     time.sleep(delay)
                     continue
                 detail = self._safe_response_text(response)
+                if status_code == 400:
+                    hint = self._bad_request_hint(detail)
+                    if hint:
+                        detail = f"{detail} | Hinweis: {hint}" if detail else hint
                 if detail:
-                    err_msg = f"Ollama HTTP-Fehler {status_code}: {detail}"
+                    err_msg = f"Ollama HTTP-Fehler {status_code} (Modell: {self.llm_model}): {detail}"
                 else:
-                    err_msg = f"Ollama HTTP-Fehler {status_code}."
+                    err_msg = f"Ollama HTTP-Fehler {status_code} (Modell: {self.llm_model})."
+                logger.error(
+                    "Ollama chat request failed status=%s model=%s endpoint=%s detail=%s",
+                    status_code,
+                    self.llm_model,
+                    endpoint,
+                    detail or "-",
+                )
                 yield {
                     "type": "error",
                     "content": err_msg,
@@ -275,6 +289,21 @@ class RAGEngine:
             except Exception:
                 text = ""
         return " ".join(text.split())[:200]
+
+    @staticmethod
+    def _bad_request_hint(detail: str) -> str:
+        lower = (detail or "").lower()
+        if not lower:
+            return ""
+        if "does not support" in lower and "chat" in lower:
+            return "Ausgewaehltes Modell unterstuetzt kein Chat. Bitte ein LLM-Modell waehlen (z. B. llama, qwen, gemma)."
+        if "embedding" in lower or "embeddings" in lower:
+            return "Es wurde wahrscheinlich ein Embedding-Modell als LLM verwendet. Bitte auf ein Chat-Modell wechseln."
+        if "context" in lower and ("length" in lower or "window" in lower or "exceed" in lower):
+            return "Prompt zu lang fuer das Modell. Weniger Treffer nutzen oder ein Modell mit groesserem Kontextfenster waehlen."
+        if "model" in lower and ("not found" in lower or "missing" in lower):
+            return "Modell nicht vorhanden. Bitte in Ollama erst mit 'ollama pull <modell>' laden."
+        return ""
 
     def _answer_ollama(self, user_message: str, stream_placeholder=None) -> str:
         full_text = ""

@@ -60,6 +60,18 @@ class _HttpStatusFailureClient:
         raise httpx.HTTPStatusError("server error", request=req, response=resp)
 
 
+class _Http400EmbeddingClient:
+    def stream(self, method, endpoint, json=None):
+        req = httpx.Request(method, endpoint)
+        resp = httpx.Response(
+            400,
+            request=req,
+            headers={"content-type": "application/json"},
+            content=b'{"error":"model does not support chat"}',
+        )
+        raise httpx.HTTPStatusError("bad request", request=req, response=resp)
+
+
 def json_module(payload):
     return json.dumps(payload)
 
@@ -104,6 +116,24 @@ class TestRagRetry(unittest.TestCase):
         self.assertTrue(events)
         self.assertEqual(events[-1]["type"], "error")
         self.assertIn("Ollama HTTP-Fehler", events[-1]["content"])
+
+    def test_http_400_adds_actionable_hint(self):
+        rag = RAGEngine(
+            "http://127.0.0.1:11434",
+            use_claude=False,
+            max_retries=1,
+        )
+        rag._client = _Http400EmbeddingClient()
+        events = list(
+            rag.answer_stream(
+                "frage",
+                [{"filename": "a", "page": 1, "text": "demo", "relevance_score": 1.0}],
+            )
+        )
+        self.assertTrue(events)
+        self.assertEqual(events[-1]["type"], "error")
+        self.assertIn("Hinweis:", events[-1]["content"])
+        self.assertIn("kein Chat", events[-1]["content"])
 
 
 if __name__ == "__main__":
