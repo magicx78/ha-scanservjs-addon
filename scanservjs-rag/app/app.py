@@ -46,6 +46,7 @@ SEARCH_CACHE_MAX_ENTRIES = int(os.environ.get("SEARCH_CACHE_MAX_ENTRIES", "300")
 STREAM_MAX_RETRIES = int(os.environ.get("STREAM_MAX_RETRIES", "3"))
 STREAM_RETRY_BASE_SECONDS = float(os.environ.get("STREAM_RETRY_BASE_SECONDS", "0.4"))
 STREAM_RETRY_JITTER_SECONDS = float(os.environ.get("STREAM_RETRY_JITTER_SECONDS", "0.25"))
+ENABLE_REFINE = os.environ.get("ENABLE_REFINE", "false").lower() == "true"
 
 SEARCH_PHASE_ORDER = [
     "started",
@@ -190,6 +191,33 @@ DESIGN_CSS = """
   max-height: 5.2rem;
   overflow: hidden;
 }
+.results-box {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: .85rem .95rem;
+  max-height: 45vh;
+  overflow: auto;
+}
+.hit-item {
+  border-left: 3px solid color-mix(in srgb, var(--accent) 65%, var(--line));
+  padding: .42rem .62rem;
+  margin: .5rem 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--accent));
+  animation: hit-pop .22s ease;
+}
+.spark {
+  display: inline-block;
+  width: .42rem;
+  height: .42rem;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-left: .22rem;
+  animation: spark 1.1s ease-in-out infinite;
+}
+.spark:nth-child(2) { animation-delay: .14s; }
+.spark:nth-child(3) { animation-delay: .28s; }
 .answer-box {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -229,6 +257,8 @@ DESIGN_CSS = """
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes pulse-chip { 50% { transform: translateY(-1px); } }
+@keyframes hit-pop { from { transform: translateY(4px); opacity: .4; } to { transform: translateY(0); opacity: 1; } }
+@keyframes spark { 0%,100% { transform: translateY(0); opacity: .25; } 50% { transform: translateY(-3px); opacity: 1; } }
 </style>
 """
 
@@ -639,6 +669,11 @@ def _render_status_panel():
     telemetry = state.get("telemetry", {})
     if telemetry.get("total_duration_ms"):
         details = f"{details} · Dauer {telemetry['total_duration_ms']} ms"
+    if phase in {"finding_hits", "building_answer", "expanding_result"}:
+        details = (
+            f"{details} "
+            "<span class='spark'></span><span class='spark'></span><span class='spark'></span>"
+        )
 
     st.markdown(
         "<div class='glass-card'>"
@@ -673,7 +708,7 @@ def _render_results_panel():
         st.info("Noch keine Treffer sichtbar.")
         return
 
-    cards = []
+    rows = []
     for i, chunk in enumerate(hits, start=1):
         rel = chunk.get("relevance_score", 0)
         src = source_label(chunk.get("source_label", ""))
@@ -682,29 +717,19 @@ def _render_results_panel():
         title_esc = html.escape(title)
         src_esc = html.escape(src)
         snippet_esc = html.escape(snippet)
-        cards.append(
-            "<div class='result-card'>"
+        rows.append(
+            "<div class='hit-item'>"
             f"<div class='result-title'>{title_esc}</div>"
-            f"<div class='result-sub'>{src_esc} Â· Relevanz {rel:.0%}</div>"
+            f"<div class='result-sub'>{src_esc} · Relevanz {rel:.0%}</div>"
             f"<div class='result-snippet'>{snippet_esc}</div>"
             "</div>"
         )
     st.markdown(
-        f"<div class='result-grid'>{''.join(cards)}</div>",
+        "<div class='results-box'>"
+        f"{''.join(rows)}"
+        "</div>",
         unsafe_allow_html=True,
     )
-
-    with st.expander("Quellen im Detail", expanded=False):
-        for i, chunk in enumerate(hits, start=1):
-            rel = chunk.get("relevance_score", 0)
-            fname = chunk.get("filename", "?")
-            page = chunk.get("page", "?")
-            src = source_label(chunk.get("source_label", ""))
-            with st.expander(
-                f"Quelle {i}: {fname} - Seite {page} Â· {src} (Relevanz {rel:.0%})",
-                expanded=False,
-            ):
-                st.text(chunk.get("text", ""))
 
 
 def _render_answer_panel():
@@ -771,7 +796,7 @@ def _run_search_pipeline(question: str):
         if not query_embedding:
             raise RuntimeError("Embedding fehlgeschlagen. Ist Ollama erreichbar?")
 
-        steps = sorted({1, min(3, max(1, MAX_RESULTS)), max(1, MAX_RESULTS)})
+        steps = sorted({1, max(1, MAX_RESULTS)})
         prog = db.search_progressive(query_embedding=query_embedding, steps=steps)
 
         first_context = []
@@ -800,7 +825,7 @@ def _run_search_pipeline(question: str):
                 _mark_first_hit()
                 first_context = list(payload["results"])
                 break
-            time.sleep(0.08)
+            time.sleep(0.01)
 
         if not first_context:
             _set_phase("empty", STATUS_DESCRIPTIONS["empty"])
@@ -874,9 +899,9 @@ def _run_search_pipeline(question: str):
             _render_status_panel()
             _render_results_panel()
             _render_answer_panel()
-            time.sleep(0.08)
+            time.sleep(0.01)
 
-        if expanded and st.session_state.search_state["hits"]:
+        if ENABLE_REFINE and expanded and st.session_state.search_state["hits"]:
             state = st.session_state.search_state
             state["is_streaming"] = True
             state["status_text"] = STATUS_DESCRIPTIONS["expanding_result"]
