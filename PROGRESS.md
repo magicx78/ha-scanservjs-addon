@@ -51,3 +51,17 @@ Datum: 2026-03-27
 - Confidence-Badges + Deep-Links pro Quelle
 - Background-Queue fuer parallele Suche/Antwortaktualisierung
 - Feature-Flag fuer alternative Retrieval-Stufen (z. B. 1/2/5, 1/3/8)
+
+## Nachtrag 2026-03-27 (Release 1.0.10 / 1.0.11)
+- LLM-Auswahl im UI ist jetzt funktional:
+  - echtes Dropdown fuer Modellwechsel im Suche-Tab und Status-Tab
+  - direkte Verfuegbarkeitsanzeige (online/OK) fuer das gewaehlte Modell
+- Suche wahrgenommen beschleunigt:
+  - reduzierte Retrieval-Stufen und niedrigere UI-Wartezeiten
+  - aufwendiges Refinement standardmaessig deaktiviert (ENABLE_REFINE=false)
+- UI vereinfacht:
+  - Fokus auf zwei Hauptfelder Treffer und Antwort
+  - dezente, verspielte Mikroanimationen zur Aktivitaetsanzeige
+- Versionen:
+  - 1.0.10: LLM-Dropdown + Online-Status
+  - 1.0.11: Re-Release fuer sicheres Update-Picking in Home Assistant
