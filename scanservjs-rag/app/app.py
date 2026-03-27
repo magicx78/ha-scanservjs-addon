@@ -259,6 +259,36 @@ DESIGN_CSS = """
 @keyframes pulse-chip { 50% { transform: translateY(-1px); } }
 @keyframes hit-pop { from { transform: translateY(4px); opacity: .4; } to { transform: translateY(0); opacity: 1; } }
 @keyframes spark { 0%,100% { transform: translateY(0); opacity: .25; } 50% { transform: translateY(-3px); opacity: 1; } }
+@keyframes pac-chomp { 0%,100% { clip-path: polygon(50% 50%, 100% 15%, 100% 85%);} 50% { clip-path: polygon(50% 50%, 100% 50%, 100% 50%);} }
+.pacman-row {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  margin-bottom: .55rem;
+  color: var(--muted);
+  font-size: .82rem;
+}
+.pacman {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f7b733;
+  animation: pac-chomp .24s linear infinite;
+  box-shadow: 0 0 10px rgba(247,183,51,.45);
+}
+.pacman-dots {
+  display: inline-flex;
+  gap: .26rem;
+}
+.pacman-dot {
+  width: .28rem;
+  height: .28rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 70%, var(--line));
+  animation: spark .9s ease-in-out infinite;
+}
+.pacman-dot:nth-child(2) { animation-delay: .12s; }
+.pacman-dot:nth-child(3) { animation-delay: .24s; }
 </style>
 """
 
@@ -771,7 +801,11 @@ def _render_answer_panel():
     if not answer and state["phase"] in {"started", "finding_hits", "building_answer"}:
         st.markdown(
             "<div class='answer-box'>"
-            "<div class='skeleton line'></div>"
+            "<div class='pacman-row'>"
+            "<div class='pacman'></div>"
+            "<span>Pac-Man sucht und spuckt gleich die Antwort aus...</span>"
+            "<span class='pacman-dots'><span class='pacman-dot'></span><span class='pacman-dot'></span><span class='pacman-dot'></span></span>"
+            "</div>"
             "<div class='skeleton line'></div>"
             "<div class='skeleton line short'></div>"
             "</div>",
@@ -782,9 +816,21 @@ def _render_answer_panel():
         st.markdown("<div class='answer-box'>Noch keine Antwort vorhanden.</div>", unsafe_allow_html=True)
         return
 
-    css_class = "answer-box answer-streaming" if state["is_streaming"] else "answer-box"
     safe_answer = html.escape(answer).replace("\n", "<br>")
-    st.markdown(f"<div class='{css_class}'>{safe_answer}</div>", unsafe_allow_html=True)
+    if state["is_streaming"]:
+        st.markdown(
+            "<div class='answer-box answer-streaming'>"
+            "<div class='pacman-row'>"
+            "<div class='pacman'></div>"
+            "<span>Pac-Man spuckt die Antwort langsam aus</span>"
+            "<span class='pacman-dots'><span class='pacman-dot'></span><span class='pacman-dot'></span><span class='pacman-dot'></span></span>"
+            "</div>"
+            f"{safe_answer}"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(f"<div class='answer-box'>{safe_answer}</div>", unsafe_allow_html=True)
 
 
 def _run_search_pipeline(question: str):
@@ -815,7 +861,6 @@ def _run_search_pipeline(question: str):
         return
 
     _set_phase("started", STATUS_DESCRIPTIONS["started"])
-    _render_status_panel()
     _render_results_panel()
     _render_answer_panel()
 
@@ -849,7 +894,6 @@ def _run_search_pipeline(question: str):
                 )
             st.session_state.search_state = state
             _set_phase("finding_hits", state["status_text"])
-            _render_status_panel()
             _render_results_panel()
             _render_answer_panel()
 
@@ -890,14 +934,12 @@ def _run_search_pipeline(question: str):
                 state = st.session_state.search_state
                 state["answer"] = answer_text
                 st.session_state.search_state = state
-                _render_status_panel()
                 _render_results_panel()
                 _render_answer_panel()
             elif event["type"] == "meta":
                 state = st.session_state.search_state
                 state["status_text"] = event["content"]
                 st.session_state.search_state = state
-                _render_status_panel()
             elif event["type"] == "error":
                 raise RuntimeError(event["content"])
             elif event["type"] == "cancelled":
@@ -928,7 +970,6 @@ def _run_search_pipeline(question: str):
             )
             st.session_state.search_state = state
             _set_phase("expanding_result", state["status_text"])
-            _render_status_panel()
             _render_results_panel()
             _render_answer_panel()
             time.sleep(0.01)
@@ -960,14 +1001,12 @@ def _run_search_pipeline(question: str):
                     state = st.session_state.search_state
                     state["answer"] = refined_answer
                     st.session_state.search_state = state
-                    _render_status_panel()
                     _render_results_panel()
                     _render_answer_panel()
                 elif event["type"] == "meta":
                     state = st.session_state.search_state
                     state["status_text"] = event["content"]
                     st.session_state.search_state = state
-                    _render_status_panel()
                 elif event["type"] == "error":
                     raise RuntimeError(event["content"])
                 elif event["type"] == "cancelled":
@@ -1044,13 +1083,11 @@ def tab_suche():
     elif run_search and not query.strip():
         st.warning("Bitte eine Suchfrage eingeben.")
 
-    _render_status_panel()
     _render_results_panel()
     _render_answer_panel()
 
     if st.session_state.pop("_do_search", False):
         _run_search_pipeline(st.session_state.search_state["query"])
-        _render_status_panel()
         _render_results_panel()
         _render_answer_panel()
 
