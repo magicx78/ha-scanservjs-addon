@@ -9,7 +9,7 @@ ENV ENABLE_BROTHER_SUPPORT=true
 ARG BASHIO_VERSION=v0.16.2
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends jq curl ca-certificates libusb-0.1-4 sane-airscan iproute2 imagemagick \
+    && apt-get install -y --no-install-recommends jq curl ca-certificates libusb-0.1-4 sane-airscan iproute2 imagemagick nodejs npm \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && if [ -f /etc/ImageMagick-6/policy.xml ]; then \
@@ -23,12 +23,7 @@ RUN curl -fsSL -o /tmp/bashio.tar.gz "https://github.com/hassio-addons/bashio/ar
     && ln -sf /usr/lib/bashio/bashio /usr/bin/bashio \
     && rm -rf /tmp/bashio /tmp/bashio.tar.gz
 
-RUN if command -v npm >/dev/null 2>&1; then \
-      npm install -g @llamaindex/liteparse; \
-    else \
-      echo "npm fehlt im Basisimage - LiteParse CLI kann nicht installiert werden." >&2; \
-      exit 1; \
-    fi
+RUN npm install -g @llamaindex/liteparse
 
 COPY config.local.js /etc/scanservjs/config.local.js
 COPY brother-skey /opt/scanservjs-brother-skey
