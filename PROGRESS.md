@@ -75,3 +75,15 @@ Datum: 2026-03-27
 - Versionen:
   - 1.0.12: Two-window Suche + Pac-Man-Streaming
   - 1.0.13: Versionierung + Progress-Nachtrag fuer sauberes Update in Home Assistant
+
+## Verifikation 2026-03-27 (nach Release 1.0.14)
+- Durchgefuehrte Pruefungen:
+  - `python -m py_compile` fuer `app.py`, `rag.py`, `vector_db.py`, `search_cache.py`, `state_machine.py`
+  - `python -m unittest discover -s scanservjs-rag/app/tests -p "test_*.py" -v`
+- Ergebnis:
+  - Compile: OK
+  - Tests: 8/8 OK
+- Remote-Check:
+  - `scanservjs-rag/config.yaml` auf `origin/main` steht auf `version: "1.0.14"`
+- UI-Hinweis:
+  - Suchansicht ist auf 2 feste Fenster ausgelegt (Treffer + Antwort) mit stabilen Platzhaltern.
