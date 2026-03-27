@@ -65,3 +65,13 @@ Datum: 2026-03-27
 - Versionen:
   - 1.0.10: LLM-Dropdown + Online-Status
   - 1.0.11: Re-Release fuer sicheres Update-Picking in Home Assistant
+
+## Nachtrag 2026-03-27 (Release 1.0.12 / 1.0.13)
+- Suche im UI final auf zwei Hauptfenster reduziert:
+  - Treffer (live in Echtzeit)
+  - Antwort (Streaming)
+- Pac-Man-Animation fuer den Antwortaufbau integriert ("spuckt langsam aus").
+- Suchtab vereinfacht (kein separates Statusfenster mehr), Fokus auf Lesbarkeit und direkte Rueckmeldung.
+- Versionen:
+  - 1.0.12: Two-window Suche + Pac-Man-Streaming
+  - 1.0.13: Versionierung + Progress-Nachtrag fuer sauberes Update in Home Assistant
