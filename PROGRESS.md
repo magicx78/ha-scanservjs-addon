@@ -156,3 +156,11 @@ Datum: 2026-03-27
 - Betriebs-Transparenz verbessert:
   - `run.sh` loggt jetzt die Add-on-Version dynamisch aus `config.yaml` statt statisch `v1.0.2`.
   - dadurch ist im HA-Log sofort sichtbar, welche Version wirklich laeuft.
+
+## Nachtrag 2026-03-27 (Release 1.0.22)
+- Deploy-/Runtime-Fix fuer Versionsanzeige:
+  - `config.yaml` wird jetzt explizit ins Container-Image kopiert (`/addon-config.yaml`).
+  - `run.sh` liest die Startversion aus `/addon-config.yaml` statt aus nicht vorhandener `/app/config.yaml`.
+- Ergebnis:
+  - Startlog zeigt im Normalfall die echte Add-on-Version (kein `vunknown` mehr).
+  - erleichtert Verifikation, ob der DuplicateKey-/MediaFile-Hotfix wirklich aktiv ist.

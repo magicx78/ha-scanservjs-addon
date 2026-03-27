@@ -28,7 +28,8 @@ export UPLOAD_FOLDER="/data/uploads"
 mkdir -p "${CHROMADB_PATH}" "${UPLOAD_FOLDER}"
 mkdir -p "${INBOX_FOLDER}" 2>/dev/null || true
 
-ADDON_VERSION="$(grep -oE 'version:[[:space:]]*\"[^\"]+\"' /app/config.yaml 2>/dev/null | head -n1 | sed -E 's/version:[[:space:]]*\"([^\"]+)\"/\1/' || true)"
+# config.yaml is copied to image root as /addon-config.yaml (Dockerfile)
+ADDON_VERSION="$(grep -oE 'version:[[:space:]]*\"[^\"]+\"' /addon-config.yaml 2>/dev/null | head -n1 | sed -E 's/version:[[:space:]]*\"([^\"]+)\"/\1/' || true)"
 if [[ -z "${ADDON_VERSION}" ]]; then
     ADDON_VERSION="unknown"
 fi

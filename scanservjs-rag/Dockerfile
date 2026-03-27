@@ -22,6 +22,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # App-Dateien
 COPY app/ /app/
+COPY config.yaml /addon-config.yaml
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 
