@@ -372,6 +372,38 @@ def source_label(label: str) -> str:
     return SOURCE_ICONS.get(label, f"Quelle: {label}")
 
 
+def _render_llm_selector(prefix: str = "search"):
+    embedder = get_embedder()
+    models = embedder.list_models()
+    current_llm = st.session_state.get("llm_model", OLLAMA_LLM_MODEL)
+
+    if not models:
+        st.error("LLM-Modelle konnten nicht geladen werden (Ollama offline?).")
+        return current_llm, False
+
+    if current_llm not in models:
+        current_llm = models[0]
+        st.session_state["llm_model"] = current_llm
+
+    idx = models.index(current_llm)
+    selected = st.selectbox(
+        "LLM-Modell",
+        options=models,
+        index=idx,
+        key=f"{prefix}_llm_select",
+        help="Wird sofort für die nächste Antwort verwendet.",
+    )
+    if selected != st.session_state.get("llm_model"):
+        st.session_state["llm_model"] = selected
+
+    is_online = selected in models
+    if is_online:
+        st.caption(f"Modellstatus: online · aktiv: {selected}")
+    else:
+        st.caption(f"Modellstatus: nicht verfügbar · gewählt: {selected}")
+    return selected, is_online
+
+
 def _index_file_bytes(filename: str, file_bytes: bytes) -> tuple[bool, str]:
     db = get_db()
     embedder = get_embedder()
@@ -994,6 +1026,15 @@ def tab_suche():
     with right:
         cancel_search = st.button("Abbrechen", use_container_width=True)
 
+    llm_col, llm_status_col = st.columns([3, 3])
+    with llm_col:
+        selected_llm, llm_online = _render_llm_selector(prefix="search")
+    with llm_status_col:
+        if llm_online:
+            st.success("LLM online und auswählbar")
+        else:
+            st.warning("LLM derzeit nicht online")
+
     if cancel_search:
         _request_cancel()
 
@@ -1109,19 +1150,11 @@ def tab_status():
         st.error(f"Nicht erreichbar: {OLLAMA_URL}")
         st.caption(msg)
 
-    models = embedder.list_models()
-    if models:
-        current_llm = st.session_state.get("llm_model", OLLAMA_LLM_MODEL)
-        idx = models.index(current_llm) if current_llm in models else 0
-        selected_llm = st.selectbox(
-            "LLM-Modell (Antworten)",
-            options=models,
-            index=idx,
-            help="Wird sofort aktiv.",
-        )
-        if selected_llm != st.session_state.get("llm_model"):
-            st.session_state["llm_model"] = selected_llm
-            st.caption(f"Wechsel auf {selected_llm}")
+    _, llm_online = _render_llm_selector(prefix="status")
+    if llm_online:
+        st.success("Ausgewähltes Modell ist verfügbar.")
+    else:
+        st.warning("Ausgewähltes Modell ist derzeit nicht verfügbar.")
 
     st.divider()
     st.subheader("Watch-Ordner")
