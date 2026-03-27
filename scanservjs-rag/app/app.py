@@ -269,12 +269,16 @@ DESIGN_CSS = """
   font-size: .82rem;
 }
 .pacman {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #f7b733;
-  animation: pac-chomp .24s linear infinite;
-  box-shadow: 0 0 10px rgba(247,183,51,.45);
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f7b733;
+  font-size: 18px;
+  font-weight: 700;
+  animation: pac-run .55s ease-in-out infinite;
+  text-shadow: 0 0 10px rgba(247,183,51,.45);
 }
 .pacman-dots {
   display: inline-flex;
@@ -289,6 +293,15 @@ DESIGN_CSS = """
 }
 .pacman-dot:nth-child(2) { animation-delay: .12s; }
 .pacman-dot:nth-child(3) { animation-delay: .24s; }
+@keyframes pac-run { 0%,100% { transform: translateX(0); } 50% { transform: translateX(2px); } }
+.live-row {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  color: var(--muted);
+  font-size: .8rem;
+  margin-bottom: .4rem;
+}
 </style>
 """
 
@@ -756,6 +769,14 @@ def _render_results_panel(slot=None):
     state = st.session_state.search_state
     hits = state["hits"]
     target.markdown("### Treffer")
+    if state["phase"] in {"started", "finding_hits", "building_answer", "expanding_result"}:
+        target.markdown(
+            "<div class='live-row'>"
+            "<span>Live-Suche läuft</span>"
+            "<span class='spark'></span><span class='spark'></span><span class='spark'></span>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
     if state["phase"] in {"started", "finding_hits"} and not hits:
         target.markdown(
             "<div class='glass-card'>"
@@ -800,11 +821,12 @@ def _render_answer_panel(slot=None):
     state = st.session_state.search_state
     target.markdown("### Antwort")
     answer = state["answer"]
+    show_pacman = state["phase"] in {"started", "finding_hits", "building_answer", "expanding_result"} or state["is_streaming"]
     if not answer and state["phase"] in {"started", "finding_hits", "building_answer"}:
         target.markdown(
             "<div class='answer-box'>"
             "<div class='pacman-row'>"
-            "<div class='pacman'></div>"
+            "<div class='pacman'>ᗧ</div>"
             "<span>Pac-Man sucht und spuckt gleich die Antwort aus...</span>"
             "<span class='pacman-dots'><span class='pacman-dot'></span><span class='pacman-dot'></span><span class='pacman-dot'></span></span>"
             "</div>"
@@ -819,11 +841,11 @@ def _render_answer_panel(slot=None):
         return
 
     safe_answer = html.escape(answer).replace("\n", "<br>")
-    if state["is_streaming"]:
+    if show_pacman:
         target.markdown(
             "<div class='answer-box answer-streaming'>"
             "<div class='pacman-row'>"
-            "<div class='pacman'></div>"
+            "<div class='pacman'>ᗧ</div>"
             "<span>Pac-Man spuckt die Antwort langsam aus</span>"
             "<span class='pacman-dots'><span class='pacman-dot'></span><span class='pacman-dot'></span><span class='pacman-dot'></span></span>"
             "</div>"
