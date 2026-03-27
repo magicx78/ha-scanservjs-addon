@@ -173,3 +173,39 @@ Datum: 2026-03-27
   - Suchlauf endet bei Backend-HTTP-Fehlern mit sauberer Fehlermeldung statt mit `Attempted to access streaming response content, without having called read()`.
 - Tests:
   - neuer Testfall fuer HTTPStatusError hinzugefuegt (`test_rag_retry.py`), gesamter Testlauf weiterhin gruen.
+
+## Nachtrag 2026-03-27 (Release 1.0.24)
+- Start-/Ingress-Haertung:
+  - `run.sh` startet Streamlit jetzt mit `--server.address 0.0.0.0` (Port 7860 bleibt unveraendert).
+  - Ziel: Ingress kann den Dienst ueber Container-IP erreichen.
+- Crash-Schutz beim App-Import:
+  - Watcher-Initialisierung in `app.py` robust gemacht (try/except um Erstellung, Erstindexierung und Start).
+  - Fallback auf `MultiWatcher([])` statt Prozessabbruch bei Watcher-Fehlern.
+- Ollama-400-Fehlerbehandlung verbessert:
+  - LLM-Auswahl nutzt jetzt bevorzugt chatfaehige Modelle (`list_chat_models()`), Embedding-Modelle werden gefiltert.
+  - Bei `HTTP 400` wird ein konkreter Hinweis angehaengt (z. B. falsches Modell, Kontext zu lang, Modell fehlt).
+  - Fehlertext enthaelt jetzt das betroffene Modell (`Ollama HTTP-Fehler <code> (Modell: <name>) ...`).
+  - Zusatzausgabe im Log: `status`, `model`, `endpoint`, `detail`.
+- Tests/Verifikation:
+  - `test_rag_retry.py` um 400-Hinweis-Fall erweitert.
+  - lokaler Testlauf gruen (inkl. Retry-/HTTP-Fehlerfaelle).
+- Git-Status:
+  - Commit: `97cfc8f` (`fix(rag): harden startup and Ollama 400 handling; bump to 1.0.24`)
+  - Push nach `origin/main` erfolgt.
+- Offener Punkt:
+  - Fuer finale Ursachenanalyse bei weiterem Ingress-Ausfall wird der Add-on-Container-Log ab Start benoetigt (nicht nur Supervisor-Log).
+
+## Nachtrag 2026-03-27 (Release 1.0.25)
+- LLM-Auswahl klar markiert:
+  - Modellliste zeigt alle verfuegbaren Modelle, inkl. Kennzeichnung `geeignet` bzw. `nicht geeignet`.
+  - Nicht-chatgeeignete Modelle werden mit Grund markiert (z. B. Embedding-Modell/Familie).
+  - Bei Auswahl eines ungeeigneten Modells erscheint ein klarer Warnhinweis.
+- Such-Trigger explizit gemacht:
+  - Suche wird nur noch aktiv ueber den `Suchen`-Button oder per `Return` im Suchfeld gestartet.
+  - Kein implizites Starten durch reine UI-Reruns.
+  - Bei ungeeignetem LLM wird der Suchstart mit Fehlerhinweis blockiert.
+- Technische Basis:
+  - `OllamaEmbedder` um modellbezogene Chat-Faehigkeitsbewertung erweitert (`list_models_with_chat_capability`).
+- Verifikation lokal:
+  - `python -m py_compile scanservjs-rag/app/app.py scanservjs-rag/app/lib/embedder.py` OK.
+  - `python -m unittest scanservjs-rag/app/tests/test_rag_retry.py -v` OK.

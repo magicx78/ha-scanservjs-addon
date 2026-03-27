@@ -842,42 +842,56 @@ def _maybe_open_doc_download_dialog():
 
 def _render_llm_selector(prefix: str = "search"):
     embedder = get_embedder()
-    models = embedder.list_chat_models()
+    model_infos = embedder.list_models_with_chat_capability()
     current_llm = st.session_state.get("llm_model", OLLAMA_LLM_MODEL)
 
-    if not models:
-        fallback_models = embedder.list_models()
-        if fallback_models:
-            models = fallback_models
-            st.warning(
-                "Konnte chatfaehige Modelle nicht sicher erkennen. "
-                "Bitte nur LLM-Modelle (keine Embedding-Modelle) auswaehlen."
-            )
-        else:
-            st.error("LLM-Modelle konnten nicht geladen werden (Ollama offline?).")
-            return current_llm, False
+    if not model_infos:
+        st.error("LLM-Modelle konnten nicht geladen werden (Ollama offline?).")
+        return current_llm, False
+
+    models = [m["name"] for m in model_infos]
+    unsuitable_models = {
+        m["name"]: m.get("reason", "Nicht fuer Chat geeignet")
+        for m in model_infos
+        if not m.get("chat_capable")
+    }
+    suitable_models = [m["name"] for m in model_infos if m.get("chat_capable")]
 
     if current_llm not in models:
-        current_llm = models[0]
+        current_llm = suitable_models[0] if suitable_models else models[0]
         st.session_state["llm_model"] = current_llm
 
     idx = models.index(current_llm)
+
+    def _model_label(model_name: str) -> str:
+        reason = unsuitable_models.get(model_name)
+        if reason:
+            return f"{model_name}  [nicht geeignet: {reason}]"
+        return f"{model_name}  [geeignet]"
+
     selected = st.selectbox(
         "LLM-Modell",
         options=models,
         index=idx,
         key=f"{prefix}_llm_select",
+        format_func=_model_label,
         help="Wird sofort für die nächste Antwort verwendet.",
     )
     if selected != st.session_state.get("llm_model"):
         st.session_state["llm_model"] = selected
 
-    is_online = selected in models
-    if is_online:
+    is_chat_capable = selected not in unsuitable_models
+    if is_chat_capable:
         st.caption(f"Modellstatus: online · aktiv: {selected}")
     else:
-        st.caption(f"Modellstatus: nicht verfügbar · gewählt: {selected}")
-    return selected, is_online
+        reason = unsuitable_models.get(selected, "Nicht fuer Chat geeignet")
+        st.caption(f"Modellstatus: online · gewaehlt: {selected}")
+        st.warning(f"Ausgewaehltes Modell ist fuer Chat nicht geeignet ({reason}).")
+    return selected, is_chat_capable
+
+
+def _trigger_search_from_enter():
+    st.session_state["_search_enter_pressed"] = True
 
 
 def _index_file_bytes(filename: str, file_bytes: bytes) -> tuple[bool, str]:
@@ -1598,6 +1612,7 @@ def tab_suche():
             placeholder="z.B. Welche Rechnungen gibt es von 2024?",
             key="search_q",
             label_visibility="collapsed",
+            on_change=_trigger_search_from_enter,
         )
     with center:
         run_search = st.button("Suchen", type="primary", use_container_width=True)
@@ -1606,20 +1621,26 @@ def tab_suche():
 
     llm_col, llm_status_col = st.columns([3, 3])
     with llm_col:
-        selected_llm, llm_online = _render_llm_selector(prefix="search")
+        selected_llm, llm_chat_ok = _render_llm_selector(prefix="search")
     with llm_status_col:
-        if llm_online:
+        if llm_chat_ok:
             st.success("LLM online und auswählbar")
         else:
-            st.warning("LLM derzeit nicht online")
+            st.warning("LLM online, aber fuer Chat ungeeignet")
 
     if cancel_search:
         _request_cancel()
 
-    if run_search and query.strip():
-        _new_search(query.strip())
-        st.session_state["_do_search"] = True
-    elif run_search and not query.strip():
+    enter_search = st.session_state.pop("_search_enter_pressed", False)
+    should_run_search = run_search or enter_search
+
+    if should_run_search and query.strip():
+        if not llm_chat_ok:
+            st.error("Bitte ein als geeignet markiertes LLM-Modell auswaehlen.")
+        else:
+            _new_search(query.strip())
+            st.session_state["_do_search"] = True
+    elif should_run_search and not query.strip():
         st.warning("Bitte eine Suchfrage eingeben.")
 
     results_slot = st.empty()
@@ -1733,11 +1754,11 @@ def tab_status():
         st.error(f"Nicht erreichbar: {OLLAMA_URL}")
         st.caption(msg)
 
-    _, llm_online = _render_llm_selector(prefix="status")
-    if llm_online:
+    _, llm_chat_ok = _render_llm_selector(prefix="status")
+    if llm_chat_ok:
         st.success("Ausgewähltes Modell ist verfügbar.")
     else:
-        st.warning("Ausgewähltes Modell ist derzeit nicht verfügbar.")
+        st.warning("Ausgewaehltes Modell ist online, aber nicht chatgeeignet.")
 
     st.divider()
     st.subheader("Watch-Ordner")

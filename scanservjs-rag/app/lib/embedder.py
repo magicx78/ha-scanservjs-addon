@@ -59,41 +59,62 @@ class OllamaEmbedder:
     def list_models(self) -> list[str]:
         """Gibt Liste aller verfuegbaren Ollama-Modelle zurueck."""
         try:
-            response = self._client.get(f"{self.url}/api/tags", timeout=5.0)
-            response.raise_for_status()
-            return [m["name"] for m in response.json().get("models", [])]
+            return [m["name"] for m in self._fetch_model_entries()]
         except Exception:
             return []
+
+    def list_models_with_chat_capability(self) -> list[dict]:
+        """Returns model list with a chat-capable flag and reason."""
+        models: list[dict] = []
+        try:
+            entries = self._fetch_model_entries()
+        except Exception:
+            return []
+
+        for entry in entries:
+            name = str(entry.get("name") or "").strip()
+            if not name:
+                continue
+            is_chat_capable, reason = self._is_chat_capable(entry)
+            models.append(
+                {
+                    "name": name,
+                    "chat_capable": is_chat_capable,
+                    "reason": reason,
+                }
+            )
+        return models
 
     def list_chat_models(self) -> list[str]:
         """Returns preferred chat-capable models (filters obvious embedding-only models)."""
         try:
-            response = self._client.get(f"{self.url}/api/tags", timeout=5.0)
-            response.raise_for_status()
-            models = response.json().get("models", [])
+            models = self.list_models_with_chat_capability()
         except Exception:
             return []
 
-        chat_models: list[str] = []
-        all_names: list[str] = []
-        for model in models:
-            name = str(model.get("name") or "").strip()
-            if not name:
-                continue
-            all_names.append(name)
-
-            # Embedding models often fail on /api/chat with HTTP 400.
-            lower_name = name.lower()
-            details = model.get("details") or {}
-            families = details.get("families") or []
-            families_text = " ".join(str(f).lower() for f in families)
-            if "embed" in lower_name or "embedding" in lower_name:
-                continue
-            if "bert" in families_text or "embed" in families_text:
-                continue
-            chat_models.append(name)
-
+        all_names = [m["name"] for m in models]
+        chat_models = [m["name"] for m in models if m.get("chat_capable")]
         return chat_models or all_names
+
+    def _fetch_model_entries(self) -> list[dict]:
+        response = self._client.get(f"{self.url}/api/tags", timeout=5.0)
+        response.raise_for_status()
+        return response.json().get("models", [])
+
+    @staticmethod
+    def _is_chat_capable(model_entry: dict) -> tuple[bool, str]:
+        name = str(model_entry.get("name") or "").strip()
+        lower_name = name.lower()
+        details = model_entry.get("details") or {}
+        families = details.get("families") or []
+        families_text = " ".join(str(f).lower() for f in families)
+
+        # Embedding models often fail on /api/chat with HTTP 400.
+        if "embed" in lower_name or "embedding" in lower_name:
+            return False, "Embedding-Modell"
+        if "bert" in families_text or "embed" in families_text:
+            return False, "Embedding-Familie"
+        return True, ""
 
     def close(self):
         self._client.close()
