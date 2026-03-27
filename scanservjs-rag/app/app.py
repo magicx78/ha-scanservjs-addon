@@ -6,8 +6,10 @@ import hashlib
 import html
 import logging
 import os
+import queue
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -18,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from lib.chunker import DocumentChunker, SUPPORTED_EXTENSIONS
 from lib.embedder import OllamaEmbedder
 from lib.rag import RAGEngine
+from lib.search_cache import PersistentSearchCache
 from lib.vector_db import VectorDB
 from lib.watcher import FolderWatcher, MultiWatcher
 from lib.state_machine import normalize_transition
@@ -38,6 +41,11 @@ PAPERLESS_ARCHIVE = os.environ.get(
 )
 INBOX_FOLDER = os.environ.get("INBOX_FOLDER", "/share/rag-inbox")
 SEARCH_CACHE_TTL_SECONDS = int(os.environ.get("SEARCH_CACHE_TTL_SECONDS", "180"))
+SEARCH_CACHE_DB_PATH = os.environ.get("SEARCH_CACHE_DB_PATH", "/data/search_cache.sqlite")
+SEARCH_CACHE_MAX_ENTRIES = int(os.environ.get("SEARCH_CACHE_MAX_ENTRIES", "300"))
+STREAM_MAX_RETRIES = int(os.environ.get("STREAM_MAX_RETRIES", "3"))
+STREAM_RETRY_BASE_SECONDS = float(os.environ.get("STREAM_RETRY_BASE_SECONDS", "0.4"))
+STREAM_RETRY_JITTER_SECONDS = float(os.environ.get("STREAM_RETRY_JITTER_SECONDS", "0.25"))
 
 SEARCH_PHASE_ORDER = [
     "started",
@@ -248,11 +256,24 @@ def list_documents_cached() -> list[dict]:
     return get_db().list_documents()
 
 
+@st.cache_resource
+def get_persistent_search_cache() -> PersistentSearchCache:
+    return PersistentSearchCache(
+        db_path=SEARCH_CACHE_DB_PATH,
+        ttl_seconds=SEARCH_CACHE_TTL_SECONDS,
+        max_entries=SEARCH_CACHE_MAX_ENTRIES,
+    )
+
+
 def invalidate_ui_caches():
     """Invalidate data caches after write operations."""
     st.cache_data.clear()
     if "search_state" in st.session_state:
         st.session_state.search_state["search_cache"] = {}
+    try:
+        get_persistent_search_cache().invalidate_all()
+    except Exception:
+        pass
 
 
 @st.cache_resource
@@ -267,6 +288,9 @@ def get_rag(llm_model: str = OLLAMA_LLM_MODEL) -> RAGEngine:
         llm_model=llm_model,
         use_claude=USE_CLAUDE,
         anthropic_api_key=ANTHROPIC_API_KEY,
+        max_retries=STREAM_MAX_RETRIES,
+        retry_base_seconds=STREAM_RETRY_BASE_SECONDS,
+        retry_jitter_seconds=STREAM_RETRY_JITTER_SECONDS,
     )
 
 
@@ -379,11 +403,16 @@ def _init_search_state():
 
 
 def _db_revision() -> int:
-    return get_db().get_stats().get("total_chunks", 0)
+    return get_db().get_revision()
 
 
 def _search_cache_key(question: str, llm_model: str, revision: int) -> tuple:
     return (question.strip().lower(), llm_model, int(MAX_RESULTS), int(revision))
+
+
+def _search_cache_key_text(question: str, llm_model: str, revision: int) -> str:
+    key = _search_cache_key(question, llm_model, revision)
+    return str(key)
 
 
 def _search_cache_get(question: str, llm_model: str, revision: int) -> dict | None:
@@ -391,15 +420,30 @@ def _search_cache_get(question: str, llm_model: str, revision: int) -> dict | No
     cache = state.get("search_cache", {})
     key = _search_cache_key(question, llm_model, revision)
     item = cache.get(key)
-    if not item:
-        return None
-    age = time.time() - item.get("stored_at", 0.0)
-    if age > SEARCH_CACHE_TTL_SECONDS:
+    if item:
+        age = time.time() - item.get("stored_at", 0.0)
+        if age <= SEARCH_CACHE_TTL_SECONDS:
+            item["cache_source"] = "session"
+            return item
         cache.pop(key, None)
         state["search_cache"] = cache
         st.session_state.search_state = state
-        return None
-    return item
+
+    try:
+        persistent = get_persistent_search_cache().get(_search_cache_key_text(question, llm_model, revision))
+    except Exception:
+        persistent = None
+    if persistent:
+        persistent["cache_source"] = "persistent"
+        cache[key] = {
+            "hits": list(persistent.get("hits", [])),
+            "answer": persistent.get("answer", ""),
+            "stored_at": persistent.get("stored_at", time.time()),
+        }
+        state["search_cache"] = cache
+        st.session_state.search_state = state
+        return persistent
+    return None
 
 
 def _search_cache_put(question: str, llm_model: str, revision: int, hits: list[dict], answer: str):
@@ -420,6 +464,17 @@ def _search_cache_put(question: str, llm_model: str, revision: int, hits: list[d
 
     state["search_cache"] = cache
     st.session_state.search_state = state
+    try:
+        get_persistent_search_cache().set(
+            _search_cache_key_text(question, llm_model, revision),
+            {
+                "hits": list(hits),
+                "answer": answer,
+                "stored_at": cache[key]["stored_at"],
+            },
+        )
+    except Exception:
+        pass
 
 
 def _set_phase(phase: str, status_text: str = ""):
@@ -508,6 +563,47 @@ def _finalize_telemetry():
         telemetry.get("total_duration_ms"),
         telemetry.get("cache_hit", False),
     )
+
+
+def _consume_stream_events(stream_builder, cancel_check):
+    """Run streaming generator in a worker thread to improve cancellation behavior."""
+    event_queue: queue.Queue = queue.Queue()
+    stop_event = threading.Event()
+
+    def _worker():
+        try:
+            generator = stream_builder(
+                lambda: stop_event.is_set() or (callable(cancel_check) and cancel_check())
+            )
+            for event in generator:
+                event_queue.put(event)
+                if event.get("type") in {"done", "error", "cancelled"}:
+                    break
+        except Exception as exc:
+            event_queue.put({"type": "error", "content": str(exc)})
+        finally:
+            event_queue.put({"type": "__worker_done__"})
+
+    worker = threading.Thread(target=_worker, daemon=True)
+    worker.start()
+    try:
+        while True:
+            if callable(cancel_check) and cancel_check():
+                stop_event.set()
+            try:
+                event = event_queue.get(timeout=0.1)
+            except queue.Empty:
+                if not worker.is_alive():
+                    break
+                continue
+            if event.get("type") == "__worker_done__":
+                break
+            yield event
+            if event.get("type") in {"done", "error", "cancelled"}:
+                break
+    finally:
+        stop_event.set()
+        worker.join(timeout=1.5)
 
 
 def _phase_chip_state(target_phase: str, current_phase: str) -> str:
@@ -717,10 +813,13 @@ def _run_search_pipeline(question: str):
         _set_phase("building_answer", STATUS_DESCRIPTIONS["building_answer"])
 
         answer_text = ""
-        for event in rag.answer_stream(
-            question,
-            first_context,
-            mode="initial",
+        for event in _consume_stream_events(
+            lambda cancel_cb: rag.answer_stream(
+                question,
+                first_context,
+                mode="initial",
+                cancel_check=cancel_cb,
+            ),
             cancel_check=_cancelled,
         ):
             if st.session_state.search_state["request_id"] != request_id:
@@ -784,11 +883,14 @@ def _run_search_pipeline(question: str):
             st.session_state.search_state = state
             _set_phase("expanding_result", STATUS_DESCRIPTIONS["expanding_result"])
             refined_answer = ""
-            for event in rag.answer_stream(
-                question,
-                st.session_state.search_state["hits"],
-                mode="refine",
-                current_answer=st.session_state.search_state["answer"],
+            for event in _consume_stream_events(
+                lambda cancel_cb: rag.answer_stream(
+                    question,
+                    st.session_state.search_state["hits"],
+                    mode="refine",
+                    current_answer=st.session_state.search_state["answer"],
+                    cancel_check=cancel_cb,
+                ),
                 cancel_check=_cancelled,
             ):
                 if st.session_state.search_state["request_id"] != request_id:

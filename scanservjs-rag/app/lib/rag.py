@@ -3,6 +3,7 @@ RAG engine with streaming events for progressive UI rendering.
 """
 
 import json
+import random
 import time
 
 import httpx
@@ -52,11 +53,17 @@ class RAGEngine:
         llm_model: str = "qwen2.5:14b",
         use_claude: bool = False,
         anthropic_api_key: str = "",
+        max_retries: int = 3,
+        retry_base_seconds: float = 0.4,
+        retry_jitter_seconds: float = 0.25,
     ):
         self.ollama_url = ollama_url.rstrip("/")
         self.llm_model = llm_model
         self.use_claude = use_claude and bool(anthropic_api_key)
         self.anthropic_api_key = anthropic_api_key
+        self.max_retries = max(1, int(max_retries))
+        self.retry_base_seconds = max(0.05, float(retry_base_seconds))
+        self.retry_jitter_seconds = max(0.0, float(retry_jitter_seconds))
         self._client = httpx.Client(
             timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
         )
@@ -164,8 +171,7 @@ class RAGEngine:
         }
 
         full_text = ""
-        max_attempts = 2
-        for attempt in range(1, max_attempts + 1):
+        for attempt in range(1, self.max_retries + 1):
             if callable(cancel_check) and cancel_check():
                 yield {"type": "cancelled", "content": "Anfrage abgebrochen."}
                 return
@@ -192,12 +198,13 @@ class RAGEngine:
                 yield {"type": "done", "content": full_text or "Keine Antwort erhalten."}
                 return
             except (httpx.TimeoutException, httpx.RequestError) as exc:
-                if attempt < max_attempts and not full_text:
+                if attempt < self.max_retries and not full_text:
+                    delay = self._retry_delay(attempt)
                     yield {
                         "type": "meta",
-                        "content": f"Netzwerkproblem, Retry {attempt}/{max_attempts - 1}...",
+                        "content": f"Netzwerkproblem, erneuter Versuch {attempt + 1}/{self.max_retries} in {delay:.1f}s...",
                     }
-                    time.sleep(0.5 * attempt)
+                    time.sleep(delay)
                     continue
                 if isinstance(exc, httpx.TimeoutException):
                     yield {
@@ -211,11 +218,33 @@ class RAGEngine:
                     yield {"type": "error", "content": f"Verbindungsfehler zu Ollama: {exc}"}
                 return
             except httpx.HTTPStatusError as exc:
+                status_code = int(exc.response.status_code) if exc.response else 0
+                if (
+                    self._is_transient_status(status_code)
+                    and attempt < self.max_retries
+                    and not full_text
+                ):
+                    delay = self._retry_delay(attempt)
+                    yield {
+                        "type": "meta",
+                        "content": f"Backend {status_code}, erneuter Versuch {attempt + 1}/{self.max_retries} in {delay:.1f}s...",
+                    }
+                    time.sleep(delay)
+                    continue
                 yield {
                     "type": "error",
                     "content": f"Ollama HTTP-Fehler {exc.response.status_code}: {exc.response.text[:200]}",
                 }
                 return
+
+    def _retry_delay(self, attempt: int) -> float:
+        backoff = self.retry_base_seconds * (2 ** (attempt - 1))
+        jitter = random.uniform(0.0, self.retry_jitter_seconds)
+        return backoff + jitter
+
+    @staticmethod
+    def _is_transient_status(status_code: int) -> bool:
+        return status_code in {408, 425, 429, 500, 502, 503, 504}
 
     def _answer_ollama(self, user_message: str, stream_placeholder=None) -> str:
         full_text = ""

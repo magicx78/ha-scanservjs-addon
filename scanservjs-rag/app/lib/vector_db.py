@@ -6,6 +6,7 @@ Collection: "documents"
 """
 
 import os
+import time
 from pathlib import Path
 
 import chromadb
@@ -14,7 +15,10 @@ from chromadb.config import Settings
 
 class VectorDB:
     def __init__(self, persist_path: str = "/data/chromadb"):
-        Path(persist_path).mkdir(parents=True, exist_ok=True)
+        self._persist_path = Path(persist_path)
+        self._persist_path.mkdir(parents=True, exist_ok=True)
+        self._revision_file = self._persist_path / ".revision"
+        self._revision = self._load_revision()
         self._client = chromadb.PersistentClient(
             path=persist_path,
             settings=Settings(anonymized_telemetry=False),
@@ -54,6 +58,7 @@ class VectorDB:
                 "page": chunk["page"],
                 "chunk_index": chunk["chunk_index"],
                 "md5": chunk["md5"],
+                "updated_at": int(time.time()),
             })
             embeds.append(emb)
 
@@ -64,6 +69,7 @@ class VectorDB:
                 metadatas=metas,
                 embeddings=embeds,
             )
+            self._bump_revision()
 
         return len(ids)
 
@@ -73,6 +79,7 @@ class VectorDB:
         ids = results.get("ids", [])
         if ids:
             self._collection.delete(ids=ids)
+            self._bump_revision()
         return len(ids)
 
     # ------------------------------------------------------------------
@@ -224,8 +231,13 @@ class VectorDB:
                     "source": meta.get("source", ""),
                     "source_label": meta.get("source_label", "unknown"),
                     "chunk_count": 0,
+                    "updated_at": meta.get("updated_at", 0),
                 }
             docs[fname]["chunk_count"] += 1
+            docs[fname]["updated_at"] = max(
+                int(docs[fname].get("updated_at", 0)),
+                int(meta.get("updated_at", 0)),
+            )
 
         return sorted(docs.values(), key=lambda d: d["filename"])
 
@@ -241,7 +253,28 @@ class VectorDB:
             name="documents",
             metadata={"hnsw:space": "cosine"},
         )
+        self._bump_revision()
         return count
+
+    def get_revision(self) -> int:
+        return int(self._revision)
+
+    def _load_revision(self) -> int:
+        try:
+            if self._revision_file.exists():
+                return int(self._revision_file.read_text(encoding="utf-8").strip() or "0")
+        except Exception:
+            pass
+        return 0
+
+    def _write_revision(self):
+        tmp = self._revision_file.with_suffix(".tmp")
+        tmp.write_text(str(self._revision), encoding="utf-8")
+        tmp.replace(self._revision_file)
+
+    def _bump_revision(self):
+        self._revision = int(self._revision) + 1
+        self._write_revision()
 
     def get_stats(self) -> dict:
         """Gibt Statistiken zur Datenbank zurück."""
@@ -262,4 +295,5 @@ class VectorDB:
             "total_documents": len(docs),
             "total_chunks": total_chunks,
             "db_size_mb": round(db_size_bytes / (1024 * 1024), 2),
+            "revision": self.get_revision(),
         }
