@@ -164,3 +164,12 @@ Datum: 2026-03-27
 - Ergebnis:
   - Startlog zeigt im Normalfall die echte Add-on-Version (kein `vunknown` mehr).
   - erleichtert Verifikation, ob der DuplicateKey-/MediaFile-Hotfix wirklich aktiv ist.
+
+## Nachtrag 2026-03-27 (Release 1.0.23)
+- Fehlerbehebung im LLM-Streaming-Fehlerpfad:
+  - HTTP-Fehlerbehandlung in `rag.py` robust gemacht, sodass keine Ausnahme mehr durch Zugriff auf ungelesene Streaming-Response (`response.text`) entsteht.
+  - neue sichere Detail-Extraktion fuer HTTP-Fehler (`_safe_response_text`), inkl. Fallback auf `read()`/`reason_phrase`.
+- Ergebnis:
+  - Suchlauf endet bei Backend-HTTP-Fehlern mit sauberer Fehlermeldung statt mit `Attempted to access streaming response content, without having called read()`.
+- Tests:
+  - neuer Testfall fuer HTTPStatusError hinzugefuegt (`test_rag_retry.py`), gesamter Testlauf weiterhin gruen.

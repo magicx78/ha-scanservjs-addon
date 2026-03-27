@@ -47,6 +47,19 @@ class _FailThenSuccessClient:
         return _OkResponse(payloads)
 
 
+class _HttpStatusFailureClient:
+    def stream(self, method, endpoint, json=None):
+        req = httpx.Request(method, endpoint)
+        # Simulate a streaming response body that is not pre-read.
+        resp = httpx.Response(
+            500,
+            request=req,
+            headers={"content-type": "text/plain"},
+            content=b"backend temporary failure",
+        )
+        raise httpx.HTTPStatusError("server error", request=req, response=resp)
+
+
 def json_module(payload):
     return json.dumps(payload)
 
@@ -74,6 +87,23 @@ class TestRagRetry(unittest.TestCase):
         self.assertIn("meta", event_types)
         self.assertIn("done", event_types)
         sleep_mock.assert_called()
+
+    def test_http_status_error_is_reported_without_stream_text_crash(self):
+        rag = RAGEngine(
+            "http://127.0.0.1:11434",
+            use_claude=False,
+            max_retries=1,
+        )
+        rag._client = _HttpStatusFailureClient()
+        events = list(
+            rag.answer_stream(
+                "frage",
+                [{"filename": "a", "page": 1, "text": "demo", "relevance_score": 1.0}],
+            )
+        )
+        self.assertTrue(events)
+        self.assertEqual(events[-1]["type"], "error")
+        self.assertIn("Ollama HTTP-Fehler", events[-1]["content"])
 
 
 if __name__ == "__main__":

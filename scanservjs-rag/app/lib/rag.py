@@ -218,7 +218,8 @@ class RAGEngine:
                     yield {"type": "error", "content": f"Verbindungsfehler zu Ollama: {exc}"}
                 return
             except httpx.HTTPStatusError as exc:
-                status_code = int(exc.response.status_code) if exc.response else 0
+                response = exc.response
+                status_code = int(getattr(response, "status_code", 0) or 0)
                 if (
                     self._is_transient_status(status_code)
                     and attempt < self.max_retries
@@ -231,9 +232,14 @@ class RAGEngine:
                     }
                     time.sleep(delay)
                     continue
+                detail = self._safe_response_text(response)
+                if detail:
+                    err_msg = f"Ollama HTTP-Fehler {status_code}: {detail}"
+                else:
+                    err_msg = f"Ollama HTTP-Fehler {status_code}."
                 yield {
                     "type": "error",
-                    "content": f"Ollama HTTP-Fehler {exc.response.status_code}: {exc.response.text[:200]}",
+                    "content": err_msg,
                 }
                 return
 
@@ -245,6 +251,30 @@ class RAGEngine:
     @staticmethod
     def _is_transient_status(status_code: int) -> bool:
         return status_code in {408, 425, 429, 500, 502, 503, 504}
+
+    @staticmethod
+    def _safe_response_text(response) -> str:
+        """Return a short response detail without requiring pre-read streamed bodies."""
+        if response is None:
+            return ""
+        text = ""
+        try:
+            text = response.text or ""
+        except Exception:
+            try:
+                raw = response.read()
+                if isinstance(raw, bytes):
+                    text = raw.decode("utf-8", errors="replace")
+                else:
+                    text = str(raw)
+            except Exception:
+                text = ""
+        if not text:
+            try:
+                text = str(getattr(response, "reason_phrase", "") or "")
+            except Exception:
+                text = ""
+        return " ".join(text.split())[:200]
 
     def _answer_ollama(self, user_message: str, stream_placeholder=None) -> str:
         full_text = ""
