@@ -87,3 +87,14 @@ Datum: 2026-03-27
   - `scanservjs-rag/config.yaml` auf `origin/main` steht auf `version: "1.0.14"`
 - UI-Hinweis:
   - Suchansicht ist auf 2 feste Fenster ausgelegt (Treffer + Antwort) mit stabilen Platzhaltern.
+
+## Nachtrag 2026-03-27 (Release 1.0.16)
+- Fehlerbehebung Suche/Streaming:
+  - `missing ScriptRunContext` Warnungen durch Worker-Cancel-Check behoben (kein Streamlit-Zugriff mehr aus Worker-Thread).
+  - Trefferfenster zeigt nach dem ersten Hit direkt die Top-`MAX_RESULTS` nach Relevanz (nicht mehr nur 1 Treffer).
+  - Antwortfenster zeigt bei Fehlern jetzt den Fehlertext klar an.
+- Pac-Man/Animationen sichtbar gemacht:
+  - Pac-Man-Glyph + Bewegung waehrend laufender Antwortgenerierung.
+  - Live-Suchindikator im Trefferfenster.
+- Stabilisierung:
+  - nur ein fixes Trefferfenster und ein fixes Antwortfenster (keine Mehrfach-Panel-Vervielfachung).

@@ -677,9 +677,9 @@ def _consume_stream_events(stream_builder, cancel_check):
 
     def _worker():
         try:
-            generator = stream_builder(
-                lambda: stop_event.is_set() or (callable(cancel_check) and cancel_check())
-            )
+            # IMPORTANT: do not access Streamlit context from this worker thread.
+            # Main thread updates stop_event when user/request cancellation is detected.
+            generator = stream_builder(lambda: stop_event.is_set())
             for event in generator:
                 event_queue.put(event)
                 if event.get("type") in {"done", "error", "cancelled"}:
@@ -821,6 +821,10 @@ def _render_answer_panel(slot=None):
     state = st.session_state.search_state
     target.markdown("### Antwort")
     answer = state["answer"]
+    if state["phase"] == "error":
+        msg = html.escape(state.get("error") or state.get("status_text") or "Unbekannter Fehler")
+        target.markdown(f"<div class='answer-box'>Fehler: {msg}</div>", unsafe_allow_html=True)
+        return
     show_pacman = state["phase"] in {"started", "finding_hits", "building_answer", "expanding_result"} or state["is_streaming"]
     if not answer and state["phase"] in {"started", "finding_hits", "building_answer"}:
         target.markdown(
@@ -931,6 +935,17 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
             _set_phase("empty", STATUS_DESCRIPTIONS["empty"])
             return
 
+        # Ensure full relevant hit set is visible quickly (not only first hit).
+        all_hits = db.search(query_embedding, n_results=max(1, MAX_RESULTS))
+        if all_hits:
+            state = st.session_state.search_state
+            state["hits"] = all_hits
+            state["status_text"] = f"{len(all_hits)} Treffer nach Relevanz."
+            st.session_state.search_state = state
+            _render_results_panel(results_slot)
+            _render_answer_panel(answer_slot)
+            first_context = all_hits
+
         state = st.session_state.search_state
         state["is_streaming"] = True
         state["status_text"] = STATUS_DESCRIPTIONS["building_answer"]
@@ -976,72 +991,6 @@ def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
         state["is_streaming"] = False
         state["answer"] = answer_text or "Keine Antwort erhalten."
         st.session_state.search_state = state
-
-        expanded = False
-        for payload in prog:
-            if st.session_state.search_state["request_id"] != request_id:
-                return
-            if st.session_state.search_state["cancel_requested"]:
-                _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
-                return
-
-            if payload["new_results"]:
-                expanded = True
-            state = st.session_state.search_state
-            state["hits"] = payload["results"]
-            state["status_text"] = (
-                f"Erweitert auf {len(payload['results'])} Treffer (Stufe {payload['step']}/{len(steps)})."
-            )
-            st.session_state.search_state = state
-            _set_phase("expanding_result", state["status_text"])
-            _render_results_panel(results_slot)
-            _render_answer_panel(answer_slot)
-            time.sleep(0.01)
-
-        if ENABLE_REFINE and expanded and st.session_state.search_state["hits"]:
-            state = st.session_state.search_state
-            state["is_streaming"] = True
-            state["status_text"] = STATUS_DESCRIPTIONS["expanding_result"]
-            st.session_state.search_state = state
-            _set_phase("expanding_result", STATUS_DESCRIPTIONS["expanding_result"])
-            refined_answer = ""
-            for event in _consume_stream_events(
-                lambda cancel_cb: rag.answer_stream(
-                    question,
-                    st.session_state.search_state["hits"],
-                    mode="refine",
-                    current_answer=st.session_state.search_state["answer"],
-                    cancel_check=cancel_cb,
-                ),
-                cancel_check=_cancelled,
-            ):
-                if st.session_state.search_state["request_id"] != request_id:
-                    return
-                if st.session_state.search_state["cancel_requested"]:
-                    _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
-                    return
-                if event["type"] == "token":
-                    refined_answer += event["content"]
-                    state = st.session_state.search_state
-                    state["answer"] = refined_answer
-                    st.session_state.search_state = state
-                    _render_results_panel(results_slot)
-                    _render_answer_panel(answer_slot)
-                elif event["type"] == "meta":
-                    state = st.session_state.search_state
-                    state["status_text"] = event["content"]
-                    st.session_state.search_state = state
-                elif event["type"] == "error":
-                    raise RuntimeError(event["content"])
-                elif event["type"] == "cancelled":
-                    _set_phase("cancelled", STATUS_DESCRIPTIONS["cancelled"])
-                    return
-                elif event["type"] == "done":
-                    refined_answer = event.get("content", refined_answer)
-            state = st.session_state.search_state
-            state["answer"] = refined_answer or state["answer"]
-            state["is_streaming"] = False
-            st.session_state.search_state = state
 
         _search_cache_put(
             question=question,
