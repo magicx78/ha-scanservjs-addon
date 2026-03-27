@@ -751,12 +751,13 @@ def _render_status_panel():
         )
 
 
-def _render_results_panel():
+def _render_results_panel(slot=None):
+    target = slot if slot is not None else st
     state = st.session_state.search_state
     hits = state["hits"]
-    st.markdown("### Treffer")
+    target.markdown("### Treffer")
     if state["phase"] in {"started", "finding_hits"} and not hits:
-        st.markdown(
+        target.markdown(
             "<div class='glass-card'>"
             "<div class='skeleton line'></div>"
             "<div class='skeleton line short'></div>"
@@ -767,7 +768,7 @@ def _render_results_panel():
         return
 
     if not hits:
-        st.info("Noch keine Treffer sichtbar.")
+        target.info("Noch keine Treffer sichtbar.")
         return
 
     rows = []
@@ -786,7 +787,7 @@ def _render_results_panel():
             f"<div class='result-snippet'>{snippet_esc}</div>"
             "</div>"
         )
-    st.markdown(
+    target.markdown(
         "<div class='results-box'>"
         f"{''.join(rows)}"
         "</div>",
@@ -794,12 +795,13 @@ def _render_results_panel():
     )
 
 
-def _render_answer_panel():
+def _render_answer_panel(slot=None):
+    target = slot if slot is not None else st
     state = st.session_state.search_state
-    st.markdown("### Antwort")
+    target.markdown("### Antwort")
     answer = state["answer"]
     if not answer and state["phase"] in {"started", "finding_hits", "building_answer"}:
-        st.markdown(
+        target.markdown(
             "<div class='answer-box'>"
             "<div class='pacman-row'>"
             "<div class='pacman'></div>"
@@ -813,12 +815,12 @@ def _render_answer_panel():
         )
         return
     if not answer:
-        st.markdown("<div class='answer-box'>Noch keine Antwort vorhanden.</div>", unsafe_allow_html=True)
+        target.markdown("<div class='answer-box'>Noch keine Antwort vorhanden.</div>", unsafe_allow_html=True)
         return
 
     safe_answer = html.escape(answer).replace("\n", "<br>")
     if state["is_streaming"]:
-        st.markdown(
+        target.markdown(
             "<div class='answer-box answer-streaming'>"
             "<div class='pacman-row'>"
             "<div class='pacman'></div>"
@@ -830,10 +832,10 @@ def _render_answer_panel():
             unsafe_allow_html=True,
         )
     else:
-        st.markdown(f"<div class='answer-box'>{safe_answer}</div>", unsafe_allow_html=True)
+        target.markdown(f"<div class='answer-box'>{safe_answer}</div>", unsafe_allow_html=True)
 
 
-def _run_search_pipeline(question: str):
+def _run_search_pipeline(question: str, results_slot=None, answer_slot=None):
     db = get_db()
     embedder = get_embedder()
     active_llm = st.session_state.get("llm_model", OLLAMA_LLM_MODEL)
@@ -861,8 +863,8 @@ def _run_search_pipeline(question: str):
         return
 
     _set_phase("started", STATUS_DESCRIPTIONS["started"])
-    _render_results_panel()
-    _render_answer_panel()
+    _render_results_panel(results_slot)
+    _render_answer_panel(answer_slot)
 
     try:
         def _cancelled() -> bool:
@@ -894,8 +896,8 @@ def _run_search_pipeline(question: str):
                 )
             st.session_state.search_state = state
             _set_phase("finding_hits", state["status_text"])
-            _render_results_panel()
-            _render_answer_panel()
+            _render_results_panel(results_slot)
+            _render_answer_panel(answer_slot)
 
             if payload["results"]:
                 _mark_first_hit()
@@ -934,8 +936,8 @@ def _run_search_pipeline(question: str):
                 state = st.session_state.search_state
                 state["answer"] = answer_text
                 st.session_state.search_state = state
-                _render_results_panel()
-                _render_answer_panel()
+                _render_results_panel(results_slot)
+                _render_answer_panel(answer_slot)
             elif event["type"] == "meta":
                 state = st.session_state.search_state
                 state["status_text"] = event["content"]
@@ -970,8 +972,8 @@ def _run_search_pipeline(question: str):
             )
             st.session_state.search_state = state
             _set_phase("expanding_result", state["status_text"])
-            _render_results_panel()
-            _render_answer_panel()
+            _render_results_panel(results_slot)
+            _render_answer_panel(answer_slot)
             time.sleep(0.01)
 
         if ENABLE_REFINE and expanded and st.session_state.search_state["hits"]:
@@ -1001,8 +1003,8 @@ def _run_search_pipeline(question: str):
                     state = st.session_state.search_state
                     state["answer"] = refined_answer
                     st.session_state.search_state = state
-                    _render_results_panel()
-                    _render_answer_panel()
+                    _render_results_panel(results_slot)
+                    _render_answer_panel(answer_slot)
                 elif event["type"] == "meta":
                     state = st.session_state.search_state
                     state["status_text"] = event["content"]
@@ -1083,13 +1085,19 @@ def tab_suche():
     elif run_search and not query.strip():
         st.warning("Bitte eine Suchfrage eingeben.")
 
-    _render_results_panel()
-    _render_answer_panel()
+    results_slot = st.empty()
+    answer_slot = st.empty()
+    _render_results_panel(results_slot)
+    _render_answer_panel(answer_slot)
 
     if st.session_state.pop("_do_search", False):
-        _run_search_pipeline(st.session_state.search_state["query"])
-        _render_results_panel()
-        _render_answer_panel()
+        _run_search_pipeline(
+            st.session_state.search_state["query"],
+            results_slot=results_slot,
+            answer_slot=answer_slot,
+        )
+        _render_results_panel(results_slot)
+        _render_answer_panel(answer_slot)
 
 
 def tab_hochladen():
