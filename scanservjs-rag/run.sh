@@ -28,7 +28,12 @@ export UPLOAD_FOLDER="/data/uploads"
 mkdir -p "${CHROMADB_PATH}" "${UPLOAD_FOLDER}"
 mkdir -p "${INBOX_FOLDER}" 2>/dev/null || true
 
-log "Starte scanservjs-rag v1.0.2"
+ADDON_VERSION="$(grep -oE 'version:[[:space:]]*\"[^\"]+\"' /app/config.yaml 2>/dev/null | head -n1 | sed -E 's/version:[[:space:]]*\"([^\"]+)\"/\1/' || true)"
+if [[ -z "${ADDON_VERSION}" ]]; then
+    ADDON_VERSION="unknown"
+fi
+
+log "Starte scanservjs-rag v${ADDON_VERSION}"
 log "Ollama URL:         ${OLLAMA_URL}"
 log "Embed Modell:       ${OLLAMA_EMBED_MODEL}"
 log "LLM Modell:         ${OLLAMA_LLM_MODEL}"

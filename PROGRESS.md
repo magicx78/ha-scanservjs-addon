@@ -148,3 +148,11 @@ Datum: 2026-03-27
 - Ergebnis:
   - keine Duplicate-Key-Abbrueche mehr im Trefferfenster.
   - deutlich stabilerer Vorschau-/Download-Flow unter haeufigen Reruns.
+
+## Nachtrag 2026-03-27 (Release 1.0.21)
+- Zusatz-Haertung fuer den gemeldeten Live-Fehlerfall:
+  - Vorschau-Button-Keys jetzt mit Render-Nonce abgesichert (`hit_preview_<nonce>...`) gegen Mehrfach-Render im selben Run.
+  - Dokument-Downloads im Dokumente-Tab auf Dialog + Data-URI umgestellt (kein `st.download_button` mehr), um `MediaFileHandler: Missing file ...bin` zu vermeiden.
+- Betriebs-Transparenz verbessert:
+  - `run.sh` loggt jetzt die Add-on-Version dynamisch aus `config.yaml` statt statisch `v1.0.2`.
+  - dadurch ist im HA-Log sofort sichtbar, welche Version wirklich laeuft.

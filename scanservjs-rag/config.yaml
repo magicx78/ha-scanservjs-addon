@@ -1,5 +1,5 @@
 name: "scanservjs RAG Dokumentensuche"
-version: "1.0.20"
+version: "1.0.21"
 slug: "scanservjs-rag"
 description: "Lokale KI-Dokumentensuche (RAG) für gescannte Dokumente mit Ollama und ChromaDB."
 url: "https://github.com/magicx78/ha-scanservjs-addon"

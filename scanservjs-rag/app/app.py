@@ -553,6 +553,13 @@ def _hit_widget_key(prefix: str, index: int, hit: dict) -> str:
     return f"{prefix}_{digest}"
 
 
+def _next_render_nonce(name: str) -> int:
+    key = f"_{name}_render_nonce"
+    current = int(st.session_state.get(key, 0)) + 1
+    st.session_state[key] = current
+    return current
+
+
 def _resolve_hit_file(hit: dict) -> Path | None:
     candidates: list[Path] = []
     source_path = (hit.get("source") or "").strip()
@@ -587,6 +594,18 @@ def _open_preview_for_hit(hit: dict):
 def _close_preview():
     st.session_state["preview_open"] = False
     st.session_state["preview_hit"] = None
+
+
+def _open_doc_download(path: str, filename: str):
+    st.session_state["doc_download_path"] = path
+    st.session_state["doc_download_filename"] = filename
+    st.session_state["doc_download_open"] = True
+
+
+def _close_doc_download():
+    st.session_state["doc_download_open"] = False
+    st.session_state["doc_download_path"] = ""
+    st.session_state["doc_download_filename"] = ""
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -746,6 +765,65 @@ def _maybe_open_preview_dialog():
         _render_preview_dialog()
 
 
+@st.dialog("Dokument-Download", width="medium")
+def _render_doc_download_dialog():
+    path = (st.session_state.get("doc_download_path") or "").strip()
+    filename = (st.session_state.get("doc_download_filename") or "").strip() or "dokument.bin"
+    if not path:
+        st.error("Kein Dokument fuer Download gesetzt.")
+        if st.button("Schliessen", key="doc_dl_close_empty", use_container_width=True):
+            _close_doc_download()
+            st.rerun()
+        return
+
+    file_path = Path(path)
+    if not file_path.exists() or not file_path.is_file():
+        st.error("Datei nicht gefunden.")
+        if st.button("Schliessen", key="doc_dl_close_missing", use_container_width=True):
+            _close_doc_download()
+            st.rerun()
+        return
+
+    data = _load_binary_file(str(file_path))
+    suffix = file_path.suffix.lower()
+    mime = "application/pdf" if suffix == ".pdf" else "application/octet-stream"
+    b64 = base64.b64encode(data).decode("ascii")
+    uri = f"data:{mime};base64,{b64}"
+    safe_filename = html.escape(filename, quote=True)
+    components.html(
+        f"""
+        <div style="display:flex;align-items:center;gap:.5rem;margin:.25rem 0 .75rem;">
+          <a
+            download="{safe_filename}"
+            href="{uri}"
+            style="
+              width:100%;
+              height:36px;
+              border-radius:10px;
+              border:1px solid #2a3a52;
+              background:#1a2638;
+              color:#e8effa;
+              font-weight:600;
+              text-decoration:none;
+              display:flex;
+              align-items:center;
+              justify-content:center;">
+            Download starten
+          </a>
+        </div>
+        """,
+        height=56,
+    )
+    if st.button("Schliessen", key="doc_dl_close", use_container_width=True):
+        _close_doc_download()
+        st.rerun()
+
+
+def _maybe_open_doc_download_dialog():
+    if st.session_state.get("doc_download_open", False):
+        _render_doc_download_dialog()
+
+
 def _render_llm_selector(prefix: str = "search"):
     embedder = get_embedder()
     models = embedder.list_models()
@@ -818,6 +896,12 @@ def _init_search_state():
         st.session_state["preview_open"] = False
     if "preview_hit" not in st.session_state:
         st.session_state["preview_hit"] = None
+    if "doc_download_open" not in st.session_state:
+        st.session_state["doc_download_open"] = False
+    if "doc_download_path" not in st.session_state:
+        st.session_state["doc_download_path"] = ""
+    if "doc_download_filename" not in st.session_state:
+        st.session_state["doc_download_filename"] = ""
 
     if "search_state" in st.session_state:
         return
@@ -1209,6 +1293,7 @@ def _render_results_panel(slot=None, interactive: bool = True):
         )
         return
 
+    render_nonce = _next_render_nonce("hits_panel")
     with panel:
         for i, chunk in enumerate(hits, start=1):
             rel = chunk.get("relevance_score", 0.0)
@@ -1216,7 +1301,7 @@ def _render_results_panel(slot=None, interactive: bool = True):
             snippet = (chunk.get("text", "") or "").replace("\n", " ").strip()[:220]
             page = int(chunk.get("page", 1) or 1)
             cidx = int(chunk.get("chunk_index", 0) or 0)
-            key = _hit_widget_key("hit_preview", i, chunk)
+            key = _hit_widget_key(f"hit_preview_{render_nonce}", i, chunk)
 
             left, right = st.columns([7, 1.3], gap="small")
             with left:
@@ -1596,13 +1681,9 @@ def tab_dokumente():
                         if alt_path.exists():
                             file_path = alt_path
                     if file_path.exists():
-                        with open(file_path, "rb") as f:
-                            st.download_button(
-                                label="Download",
-                                data=f.read(),
-                                file_name=doc["filename"],
-                                key=f"dl_{lbl}_{doc['filename']}",
-                            )
+                        if st.button("Download", key=f"dl_open_{lbl}_{doc['filename']}"):
+                            _open_doc_download(str(file_path), doc["filename"])
+                            st.rerun()
                     else:
                         st.caption("Datei nicht lokal")
                 with c3:
@@ -1711,6 +1792,7 @@ with tab2:
     tab_hochladen()
 with tab3:
     tab_dokumente()
+    _maybe_open_doc_download_dialog()
 with tab4:
     tab_status()
 
