@@ -888,6 +888,10 @@ def _search_cache_put(question: str, llm_model: str, revision: int, hits: list[d
 
 def _build_progress_steps(current_phase: str) -> list[dict]:
     steps = [{"phase": p, "label": PHASE_LABELS[p], "state": "pending"} for p in SEARCH_PHASE_ORDER]
+    if current_phase == "done":
+        for step in steps:
+            step["state"] = "done"
+        return steps
     if current_phase == "error":
         return steps
     if current_phase == "idle":

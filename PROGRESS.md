@@ -130,3 +130,9 @@ Datum: 2026-03-27
 - Tests:
   - neue Tests fuer Search-Service-Events
   - State-Transition-Tests fuer neue Phase-Kette ergaenzt
+
+## Nachtrag 2026-03-27 (Release 1.0.19)
+- Debug-/Fix-Runde nach Streaming-Umstellung:
+  - Fortschritts-UI im Trefferfenster korrigiert: finaler Schritt `done` wird jetzt korrekt als abgeschlossen markiert (nicht mehr als aktiv).
+  - Regressionstestlauf erneut durchgefuehrt (`13/13` Tests OK).
+  - Keine Layout-Aenderung: weiterhin exakt 2 Hauptbereiche (Treffer + Antwort).
